@@ -41,6 +41,11 @@ dependencies:
   camera: ^0.11.2
   http_parser: ^4.0.2
   delightful_toast: ^1.1.0
+  shared_preferences: ^2.5.3
+  google_fonts: ^6.3.2
+  get: ^4.7.2
+  image_picker: ^1.2.0
+  jwt_decoder: ^2.0.1
 
 
 

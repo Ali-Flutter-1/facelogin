@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../constant/constant.dart';
 import '../../customWidgets/custom_text_field.dart';
 import '../../customWidgets/custom_toast.dart';
+import '../login/login_screen.dart';
 
 class ProfileUpdateScreen extends StatefulWidget {
   const ProfileUpdateScreen({Key? key}) : super(key: key);
@@ -101,22 +101,39 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final user = data['user'];
+        debugPrint("ProfileScreen: Parsed response: $data");
+
+        // Access nested user data
+        final user = data['data']?['user'];
+        if (user == null) {
+          debugPrint("ProfileScreen: No user data found in response");
+          showCustomToast(context, "No user data found in response.", isError: true);
+          setState(() => _isLoading = false);
+          return;
+        }
 
         setState(() {
-          _firstNameController.text = user['first_name'] ?? '';
-          _lastNameController.text = user['last_name'] ?? '';
-          _emailController.text = user['email'] ?? '';
-          _phoneController.text = user['phone'] ?? '';
-          _dobController.text = user['dob'] ?? '';
+          _firstNameController.text = user['first_name']?.toString() ?? '';
+          _lastNameController.text = user['last_name']?.toString() ?? '';
+          _emailController.text = user['email']?.toString() ?? '';
+          _phoneController.text = user['phone']?.toString() ?? '';
+          _dobController.text = user['dob']?.toString() ?? '';
           _isLoading = false;
         });
+      } else if (response.statusCode == 401) {
+        debugPrint("ProfileScreen: Access token invalid or expired");
+        showCustomToast(context, "Session expired. Please log in again.", isError: true);
+        await storage.deleteAll();
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
+              (route) => false,
+        );
       } else {
-        showCustomToast(context, "Failed to load profile.", isError: true);
-        debugPrint("Error: ${response.body}");
+        debugPrint("ProfileScreen: Failed to load profile: ${response.statusCode} - ${response.body}");
+        showCustomToast(context, "Failed to load profile: ${response.statusCode}", isError: true);
         setState(() => _isLoading = false);
-      }
-    } catch (e) {
+      }} catch (e) {
       debugPrint("Network error: $e");
       showCustomToast(context, "Error fetching profile: $e", isError: true);
       setState(() => _isLoading = false,);
@@ -147,7 +164,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
     });
 
     try {
-      final response = await http.put(
+      final response = await http.patch(
         Uri.parse(ApiConstants.profileUpdate),
         headers: {
           "Content-Type": "application/json",
