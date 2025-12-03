@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:facelogin/constant/constant.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/screens/kyc/kyc_screen.dart';
@@ -48,7 +46,7 @@ class KycController extends GetxController {
         final bytes = await imageFile.readAsBytes();
         final fileName = imageFile.name.isNotEmpty ? imageFile.name : 'image.png';
         final uint8List = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
-        
+
         request.files.add(http.MultipartFile(
           fieldName,
           Stream.value(uint8List),
@@ -80,19 +78,19 @@ class KycController extends GetxController {
           } else if (fieldName == 'id_back_image') {
             imageId = data['data']?['back_image_id'];
           }
-          
+
           // Fallback to other possible formats
-          imageId ??= data['id'] ?? 
-                     data['file_id'] ?? 
-                     data['image_id'] ?? 
-                     data['path'] ??
-                     data['url'] ??
-                     data['data']?['id'] ?? 
-                     data['data']?['file_id'] ??
-                     data['data']?['image_id'] ??
-                     data['data']?['path'] ??
-                     data['data']?['url'];
-          
+          imageId ??= data['id'] ??
+              data['file_id'] ??
+              data['image_id'] ??
+              data['path'] ??
+              data['url'] ??
+              data['data']?['id'] ??
+              data['data']?['file_id'] ??
+              data['data']?['image_id'] ??
+              data['data']?['path'] ??
+              data['data']?['url'];
+
           if (imageId != null) {
             print("✅ Image uploaded successfully, ID: $imageId");
             return imageId.toString();
@@ -105,11 +103,11 @@ class KycController extends GetxController {
       } else {
         print("❌ Upload failed with status ${response.statusCode}: ${response.body}");
       }
-      
+
       return null;
     } catch (e) {
       print("❌ Error uploading image: $e");
-      showCustomToast(context, "Failed to upload image: $e", isError: true);
+      showCustomToast(context, "Failed to upload image. Please try again.", isError: true);
       return null;
     }
   }
@@ -123,12 +121,10 @@ class KycController extends GetxController {
           frontImage.value = picked;
           // Upload front image immediately
           isUploadingFront.value = true;
-          showCustomToast(Get.context!, "Uploading front image...", isError: false);
           final imageId = await uploadImageToServer(picked, 'id_front_image', Get.context!);
           isUploadingFront.value = false;
           if (imageId != null) {
             frontImageId.value = imageId;
-            showCustomToast(Get.context!, "Front image uploaded!", isError: false);
           } else {
             showCustomToast(Get.context!, "Failed to upload front image", isError: true);
           }
@@ -136,12 +132,10 @@ class KycController extends GetxController {
           backImage.value = picked;
           // Upload back image immediately
           isUploadingBack.value = true;
-          showCustomToast(Get.context!, "Uploading back image...", isError: false);
           final imageId = await uploadImageToServer(picked, 'id_back_image', Get.context!);
           isUploadingBack.value = false;
           if (imageId != null) {
             backImageId.value = imageId;
-            showCustomToast(Get.context!, "Back image uploaded!", isError: false);
           } else {
             showCustomToast(Get.context!, "Failed to upload back image", isError: true);
           }
@@ -153,14 +147,30 @@ class KycController extends GetxController {
       } else {
         isUploadingBack.value = false;
       }
-      showCustomToast(Get.context!, "Failed to pick image: $e");
+      showCustomToast(Get.context!, "Failed to select image. Please try again.", isError: true);
       debugPrint("Image pick error: $e");
     }
   }
 
-  // Step navigation
+  // Clear all images and reset state (for UI only, not database)
+  void clearImages() {
+    frontImage.value = null;
+    backImage.value = null;
+    frontImageId.value = '';
+    backImageId.value = '';
+    isUploadingFront.value = false;
+    isUploadingBack.value = false;
+    step.value = 1;
+    print("🧹 Cleared all images from UI");
+  }
+
+  // Step navigation - ONLY called when Continue button is clicked
+  // Step does NOT auto-advance when images are uploaded
   void nextStep() {
-    if (step.value < 3) step.value++;
+    if (step.value < 3) {
+      step.value++;
+      debugPrint("Step advanced to: ${step.value}");
+    }
   }
 
   void prevStep() {
@@ -176,7 +186,7 @@ class KycController extends GetxController {
       }
       return token;
     } catch (e) {
-      showCustomToast(Get.context!, "Failed to retrieve token: $e");
+      showCustomToast(Get.context!, "Unable to authenticate. Please log in again.", isError: true);
       return null;
     }
   }
@@ -239,9 +249,11 @@ class KycController extends GetxController {
       isLoading.value = false;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        showCustomToast(context, "✅ KYC submitted successfully!");
-        // Optionally close the screen after success
-        Navigator.pop(context);
+        showCustomToast(context, " KYC submitted successfully!");
+        // Clear images from UI after successful submission
+        clearImages();
+        // Close the screen after success and return true to indicate success
+        Navigator.pop(context, true);
       } else {
         final error = json.decode(response.body);
         showCustomToast(
@@ -249,22 +261,28 @@ class KycController extends GetxController {
           error['error']?['message'] ?? 'KYC submission failed.',
           isError: true,
         );
+        // Clear images from UI even after failure
+        clearImages();
       }
     } catch (e) {
-      print("❌ Exception during KYC: $e");
+      print(" Exception during KYC: $e");
 
       isLoading.value = false;
       showCustomToast(context, "Something went wrong. Please try again.", isError: true);
+      // Clear images from UI on exception
+      clearImages();
     }
   }
 
-  void showKycDialog(BuildContext context) {
-    Navigator.push(
+  Future<bool?> showKycDialog(BuildContext context) async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => const KycScreen(),
       ),
     );
+    // Return the result so the caller can refresh if needed
+    return result as bool?;
   }
 }
 

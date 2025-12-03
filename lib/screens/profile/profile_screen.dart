@@ -1,18 +1,16 @@
 import 'dart:convert';
 import 'package:facelogin/components/kyc.dart';
-import 'package:facelogin/customWidgets/custom_button.dart';
 import 'package:facelogin/screens/kyc/kyc_screen.dart';
 import 'package:facelogin/screens/profile/profile_update_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constant/constant.dart';
-import '../../customWidgets/custom_text_field.dart';
 import '../../customWidgets/custom_toast.dart';
+import '../../customWidgets/premium_loading.dart';
 import '../login/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -36,7 +34,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   String? _fullName;
   String? _joinedDate;
-  bool _showPopup = false;
+  String? _faceImageUrl; // Store face image URL from API
+  bool _idVerified = false; // Track ID verification status
   final KycController controller = Get.put(KycController());
 
   @override
@@ -53,7 +52,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     _controller.forward();
 
     _fetchProfile();
-    _checkPopupStatus(); // check once at start
   }
 
   @override
@@ -67,17 +65,107 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.dispose();
   }
 
-  Future<void> _checkPopupStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyShown = prefs.getBool('popup_shown') ?? false;
-
-    if (!alreadyShown) {
-      await Future.delayed(const Duration(milliseconds: 600)); // small delay for smoother UI
-      setState(() {
-        _showPopup = true;
-      });
-      prefs.setBool('popup_shown', true);
-    }
+  // Build individual profile info card with premium design
+  Widget _buildProfileInfoCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            color.withValues(alpha: 0.2),
+            color.withValues(alpha: 0.1),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFF415A77).withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.3),
+            blurRadius: 15,
+            spreadRadius: 2,
+            offset: const Offset(0, 5),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 10,
+            spreadRadius: 0,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  color.withValues(alpha: 0.25),
+                  color.withValues(alpha: 0.15),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: color.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  spreadRadius: 0,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFF5B8FA8),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchProfile() async {
@@ -125,6 +213,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           _phoneController.text = user['phone']?.toString() ?? '';
           _dobController.text = user['dob']?.toString() ?? '';
           _fullName = "${user['first_name'] ?? ''} ${user['last_name'] ?? ''}".trim();
+          _idVerified = user['id_verified'] ?? false; // Get ID verification status
+          _faceImageUrl = user['face_image_url']?.toString(); // Get face image URL
+
           final rawDate = user['date_joined'] ?? user['joined_date'] ?? user['created_at'];
           if (rawDate != null && rawDate.toString().isNotEmpty) {
             try {
@@ -149,17 +240,18 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       } else {
         debugPrint("ProfileScreen: Failed to load profile: ${response.statusCode} - ${response.body}");
-        showCustomToast(context, "Failed to load profile: ${response.statusCode}", isError: true);
+        showCustomToast(context, "Failed to load profile. Please try again.", isError: true);
       }
     } catch (e) {
       debugPrint("ProfileScreen: Error fetching profile: $e");
-      showCustomToast(context, "Error fetching profile: $e", isError: true);
+      showCustomToast(context, "Unable to load profile. Please check your connection and try again.", isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0E21), //
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -174,25 +266,36 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
         actions: [
-          GestureDetector(
-            onTap: () => controller.showKycDialog(context),
+          // Only show Verify KYC button if user is not verified
+          if (!_idVerified)
+            GestureDetector(
+              onTap: () async {
+                final result = await controller.showKycDialog(context);
+                // If KYC was successfully submitted, refresh the profile
+                if (result == true) {
+                  await _fetchProfile();
+                }
+              },
 
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.circular(5)
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6.0,vertical: 4),
-                  child: Text('Verify KYC',style: GoogleFonts.acme(textStyle: TextStyle(
-                    color: Colors.white,fontSize: 14
-                  )),),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(5)
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0,vertical: 4),
+                    child: Text('Verify KYC', style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.5,
+                    ))
+                  ),
                 ),
               ),
-            ),
-          )
+            )
         ],
       ),
       body: Stack(
@@ -216,30 +319,65 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: FadeTransition(
                 opacity: _fadeAnimation,
                 child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
                       const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF415A77), Color(0xFF1B263B)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Glow effect
+                          Container(
+                            width: 110,
+                            height: 110,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  Color(0xFF415A77).withValues(alpha: 0.4),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                        child: const CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.transparent,
-                          child: Icon(
-                            Icons.person,
-                            size: 80,
-                            color: Colors.white,
+
+                          // Avatar
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF415A77), Color(0xFF1B263B)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Color(0xFF415A77).withValues(alpha: 0.5),
+                                  blurRadius: 20,
+                                  spreadRadius: 5,
+                                  offset: Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 50,
+                              backgroundColor: Colors.transparent,
+                              backgroundImage: _faceImageUrl != null &&
+                                  _faceImageUrl!.isNotEmpty
+                                  ? NetworkImage(_faceImageUrl!)
+                                  : null,
+                              child: (_faceImageUrl == null ||
+                                  _faceImageUrl!.isEmpty)
+                                  ? Icon(Icons.person, size: 80, color: Colors.white)
+                                  : null,
+                            ),
                           ),
-                        ),
+                        ],
                       ),
+
+
                       const SizedBox(height: 5),
                       Text(
                         _fullName ?? 'Full Name',
@@ -249,121 +387,195 @@ class _ProfileScreenState extends State<ProfileScreen>
                         _joinedDate ?? '',
                         style: const TextStyle(color: Colors.white, fontSize: 16),
                       ),
+
+                      // Show verification banner if not verified (using dialog box style)
+                      if (!_idVerified) ...[
+                        const SizedBox(height: 20),
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 0),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                Color(0xFF0A0E21),
+                                Color(0xFF0D1B2A),
+                                Color(0xFF1B263B),
+                                Color(0xFF415A77),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                blurRadius: 20,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 6),
+                              ),
+                              BoxShadow(
+                                color: const Color(0xFF415A77).withValues(alpha: 0.3),
+                                blurRadius: 15,
+                                spreadRadius: 1,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: const Color(0xFF415A77).withValues(alpha: 0.5),
+                                  width: 1.5,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF415A77).withValues(alpha: 0.3),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: const Color(0xFF415A77),
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.verified_user_rounded,
+                                        color: Color(0xFF5B8FA8),
+                                        size: 28,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Verify Your ID",
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 18,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            "Please verify your identity to continue",
+                                            style: TextStyle(
+                                              color: Colors.white.withValues(alpha: 0.85),
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          PremiumButton(
+                                            text: "Verify",
+                                            icon: Icons.upload_file_rounded,
+                                            height: 48,
+                                            width: null,
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(builder: (context) => const KycScreen()),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+
                       const SizedBox(height: 30),
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.1)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            CustomInnerInputField(
-                              label: 'First Name',
-                              controller: _firstNameController,
-                              icon: Icons.person_outline,
-                              readOnly: true,
-                            ),
-                            CustomInnerInputField(
-                              label: 'Last Name',
-                              controller: _lastNameController,
-                              icon: Icons.person_outline,
-                              readOnly: true,
-                            ),
-                            CustomInnerInputField(
-                              label: 'Email',
-                              controller: _emailController,
-                              icon: Icons.email_outlined,
-                              readOnly: true,
-                            ),
-                            CustomInnerInputField(
-                              label: 'Phone Number',
-                              controller: _phoneController,
-                              keyboardType: TextInputType.phone,
-                              icon: Icons.phone_outlined,
-                              readOnly: true,
-                            ),
-                            CustomInnerInputField(
-                              label: 'Date of Birth',
-                              readOnly: true,
-                              controller: _dobController,
-                              icon: Icons.calendar_today_outlined,
-                              hintText: 'Select Date of Birth',
-                            ),
-                          ],
-                        ),
+                      // Profile Information - Individual styled cards
+                      Column(
+                        children: [
+                          _buildProfileInfoCard(
+                            icon: Icons.person_outline,
+                            label: 'First Name',
+                            value: _firstNameController.text.isEmpty
+                                ? '...'
+                                : _firstNameController.text,
+                            color: const Color(0xFF415A77),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildProfileInfoCard(
+                            icon: Icons.person_outline,
+                            label: 'Last Name',
+                            value: _lastNameController.text.isEmpty
+                                ? '...'
+                                : _lastNameController.text,
+                            color: const Color(0xFF1B263B),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildProfileInfoCard(
+                            icon: Icons.email_outlined,
+                            label: 'Email',
+                            value: _emailController.text.isEmpty
+                                ? '...'
+                                : _emailController.text,
+                            color: const Color(0xFF0D1B2A),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildProfileInfoCard(
+                            icon: Icons.phone_outlined,
+                            label: 'Phone Number',
+                            value: _phoneController.text.isEmpty
+                                ? '...'
+                                : _phoneController.text,
+                            color: const Color(0xFF415A77),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildProfileInfoCard(
+                            icon: Icons.calendar_today_outlined,
+                            label: 'Date of Birth',
+                            value: _dobController.text.isEmpty
+                                ? '...'
+                                : _dobController.text,
+                            color: const Color(0xFF1B263B),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 40),
-                      SizedBox(
-                        width: double.infinity,
+                      PremiumButton(
+                        text: 'Edit Information',
+                        icon: Icons.edit_outlined,
                         height: 60,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) =>
-                                  const ProfileUpdateScreen()),
-                            );
-                            if (result == true) {
-                              _fetchProfile();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF415A77),
-                            foregroundColor: Colors.white,
-                            elevation: 6,
-                            shadowColor: Colors.blueAccent.withValues(alpha: 0.5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          child: const Text(
-                            'Edit Information',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ),
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                const ProfileUpdateScreen()),
+                          );
+                          if (result == true) {
+                            _fetchProfile();
+                          }
+                        },
                       ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
+                      const SizedBox(height: 16),
+                      PremiumButton(
+                        text: 'Logout',
+                        icon: Icons.logout_rounded,
                         height: 60,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                              await logout(context);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF415A77),
-                            foregroundColor: Colors.white,
-                            elevation: 6,
-                            shadowColor: Colors.blueAccent.withValues(alpha: 0.5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          child: const Text(
-                            'Logout',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ),
+                        onPressed: () async {
+                          await logout(context);
+                        },
                       ),
+                      const SizedBox(height: 40),
                     ],
                   ),
                 ),
@@ -371,58 +583,6 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
 
-          // 🔹 Popup Layer (appears only first time)
-          if (_showPopup)
-            Container(
-              color: Colors.black.withOpacity(0.5),
-              child: Center(
-                child: AlertDialog(
-                  backgroundColor: const Color(0xFF007AFF),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  title: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          "Please verify your ID",
-                          style: GoogleFonts.robotoCondensed(
-                            textStyle: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          setState(() => _showPopup = false);
-                        },
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                    ],
-                  ),
-                  content:  Text(
-                    "Please upload your ID on Pollus ID to continue.",
-                    style: GoogleFonts.roboto( textStyle: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold,fontSize: 16,)),
-                  ),
-                  actions: [
-                      SizedBox(width: double.infinity,
-                        child: CustomButton(text: "Verify ID",backgroundColor: Colors.black54, onPressed: (){
-                               Navigator.push(context, MaterialPageRoute(builder: (context)=>KycScreen()));
-                               setState(() => _showPopup = false);
-                        }),
-                      )
-                  ],
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -448,7 +608,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             (route) => false,
       );
     } catch (e) {
-      showCustomToast(context, "Error logging out: $e", isError: true);
+      showCustomToast(context, "Unable to log out. Please try again.", isError: true);
     }
   }
 }

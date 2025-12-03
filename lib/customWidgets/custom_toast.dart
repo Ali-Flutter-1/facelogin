@@ -1,13 +1,18 @@
-import 'package:delightful_toast/delight_toast.dart';
-import 'package:delightful_toast/toast/components/toast_card.dart';
-import 'package:delightful_toast/toast/utils/enums.dart';
 import 'package:flutter/material.dart';
 
-void showCustomToast(BuildContext context, String message, {bool isError = false}) {
-  // 🎨 Define color scheme
-  final Color iconColor = Colors.white;
+// Extension on BuildContext for easy usage throughout the app
+extension CustomSnackbarExtension on BuildContext {
+  /// Show a custom snackbar with your theme colors
+  void showCustomToast(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(this).showSnackBar(
+      _createCustomSnackBar(message, isError: isError),
+    );
+  }
+}
 
-  // ✅ For success → gradient blend of your theme colors
+/// Creates a custom SnackBar with your gradient theme colors
+SnackBar _createCustomSnackBar(String message, {bool isError = false}) {
+  // 🎨 Your theme gradient colors
   final LinearGradient successGradient = const LinearGradient(
     colors: [
       Color(0xFF0A0E21),
@@ -19,39 +24,75 @@ void showCustomToast(BuildContext context, String message, {bool isError = false
     end: Alignment.bottomRight,
   );
 
-  // ✅ For error → solid red tone
-  final Color errorColor = Colors.red.shade700;
+  // Error gradient
+  final LinearGradient errorGradient = LinearGradient(
+    colors: [
+      Colors.red.shade900,
+      Colors.red.shade800,
+      Colors.red.shade700,
+    ],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
-  DelightToastBar(
-    builder: (context) {
-      return Container(
-        decoration: BoxDecoration(
-          gradient: isError ? null : successGradient,
-          color: isError ? errorColor : null,
-          borderRadius: BorderRadius.circular(12),
+  final backgroundGradient = isError ? errorGradient : successGradient;
+  final borderColor = isError
+      ? Colors.red.shade400.withValues(alpha: 0.5)
+      : const Color(0xFF415A77).withValues(alpha: 0.5);
+
+  return SnackBar(
+    content: Container(
+      decoration: BoxDecoration(
+        gradient: backgroundGradient,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
         ),
-        child: ToastCard(
-          shadowColor: Colors.transparent,
-          color: Colors.transparent, // handled by container
-          title: Text(
-            message,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: Colors.white,
-            ),
-          ),
-          leading: Icon(
-            isError ? Icons.error : Icons.check_circle,
-            size: 26,
-            color: iconColor,
-          ),
+        border: Border(
+          top: BorderSide(color: borderColor, width: 1),
         ),
-      );
-    },
-    position: DelightSnackbarPosition.bottom,
-    autoDismiss: true,
-    animationDuration: const Duration(milliseconds: 300),
-    snackbarDuration: const Duration(seconds: 2),
-  ).show(context);
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 20,
+            spreadRadius: 0,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Center(
+        child: Text(
+          message,
+          style: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            color: Colors.white,
+            height: 1.3,
+            letterSpacing: 0.2,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ),
+    duration: const Duration(seconds: 3),
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    behavior: SnackBarBehavior.fixed,
+    padding: EdgeInsets.zero,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.only(
+        topLeft: Radius.circular(16),
+        topRight: Radius.circular(16),
+      ),
+    ),
+    clipBehavior: Clip.antiAlias,
+  );
+}
+
+// Helper function to show custom toast (for backward compatibility)
+void showCustomToast(BuildContext context, String message, {bool isError = false}) {
+  context.showCustomToast(message, isError: isError);
 }

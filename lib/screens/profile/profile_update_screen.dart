@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../constant/constant.dart';
 import '../../customWidgets/custom_text_field.dart';
 import '../../customWidgets/custom_toast.dart';
+import '../../customWidgets/premium_loading.dart';
 import '../login/login_screen.dart';
 
 class ProfileUpdateScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
   DateTime? _selectedDate;
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _idVerified = false; // Track ID verification status
 
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
@@ -118,6 +120,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
           _emailController.text = user['email']?.toString() ?? '';
           _phoneController.text = user['phone']?.toString() ?? '';
           _dobController.text = user['dob']?.toString() ?? '';
+          _idVerified = user['id_verified'] ?? false; // Get ID verification status
           _isLoading = false;
         });
       } else if (response.statusCode == 401) {
@@ -131,11 +134,11 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
         );
       } else {
         debugPrint("ProfileScreen: Failed to load profile: ${response.statusCode} - ${response.body}");
-        showCustomToast(context, "Failed to load profile: ${response.statusCode}", isError: true);
+        showCustomToast(context, "Failed to load profile. Please try again.", isError: true);
         setState(() => _isLoading = false);
       }} catch (e) {
       debugPrint("Network error: $e");
-      showCustomToast(context, "Error fetching profile: $e", isError: true);
+      showCustomToast(context, "Unable to load profile. Please check your connection and try again.", isError: true);
       setState(() => _isLoading = false,);
 
     }}
@@ -155,13 +158,21 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
       return;
     }
 
-    final body = jsonEncode({
-      "first_name": _firstNameController.text.trim(),
-      "last_name": _lastNameController.text.trim(),
+    // Only include first_name and last_name if id_verified is false
+    // If id_verified is true, these fields are read-only and shouldn't be updated
+    final Map<String, dynamic> bodyData = {
       "dob": _dobController.text.trim(),
       "phone": _phoneController.text.trim(),
       "email": _emailController.text.trim(),
-    });
+    };
+    
+    // Only add first_name and last_name if user is not verified
+    if (!_idVerified) {
+      bodyData["first_name"] = _firstNameController.text.trim();
+      bodyData["last_name"] = _lastNameController.text.trim();
+    }
+    
+    final body = jsonEncode(bodyData);
 
     try {
       final response = await http.patch(
@@ -182,7 +193,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
       }
     } catch (e) {
       debugPrint("Error updating profile: $e");
-      showCustomToast(context, "Network error: $e", isError: true);
+      showCustomToast(context, "Network error. Please check your connection and try again.", isError: true);
     } finally {
       setState(() => _isSaving = false); // 🔹 Stop loading
     }
@@ -193,6 +204,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0E21),
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: const Text(
@@ -225,6 +237,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
           opacity: _fadeAnimation,
           child: SafeArea(
             child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
@@ -232,20 +245,35 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
 
 
 
-                  const SizedBox(height: 30),
-
-                  // 🔹 Glass-like Input Card
+                  // 🔹 Glass-like Input Card with premium design
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: 0.08),
+                          Colors.white.withValues(alpha: 0.03),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
+                          color: const Color(0xFF415A77).withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                          offset: const Offset(0, 8),
+                        ),
+                        BoxShadow(
                           color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
+                          blurRadius: 15,
+                          spreadRadius: 0,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
@@ -257,11 +285,13 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
                             label: 'First Name',
                             controller: _firstNameController,
                             icon: Icons.person_outline,
+                            readOnly: _idVerified, // Read-only if id_verified is true
                           ),
                           CustomInnerInputField(
                             label: 'Last Name',
                             controller: _lastNameController,
                             icon: Icons.person_outline,
+                            readOnly: _idVerified, // Read-only if id_verified is true
                           ),
                           CustomInnerInputField(
                             label: 'Email',
@@ -278,7 +308,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
                           CustomInnerInputField(
                             label: 'Date of Birth',
                             controller: _dobController,
-                            readOnly: true,
+                            readOnly: _idVerified,
                             onTap: () => _selectDate(context),
                             icon: Icons.calendar_today_outlined,
                             hintText: 'Select your birth date',
@@ -290,70 +320,15 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
 
                   const SizedBox(height: 40),
 
-                  // 🔹 Save Button with glow
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      onPressed: _isSaving ? null : _saveProfile, // disable when loading
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        backgroundColor: const Color(0xFF415A77),
-                        elevation: 10,
-                        shadowColor: Colors.blueAccent.withValues(alpha: 0.6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: _isSaving
-                          ? const SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 3,
-                          color: Colors.white,
-                        ),
-                      )
-                          : const Text(
-                        "Save Changes",
-                        style: TextStyle(
-                          fontSize: 18,
-                          letterSpacing: 1,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                  // 🔹 Save Button with premium design
+                  PremiumButton(
+                    text: "Save Changes",
+                    icon: Icons.save_outlined,
+                    height: 56,
+                    isLoading: _isSaving,
+                    onPressed: _isSaving ? null : _saveProfile,
                   ),
-
-                  SizedBox(height: 10,),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      onPressed:(){
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        backgroundColor: const Color(0xFF415A77),
-                        elevation: 10,
-                        shadowColor: Colors.blueAccent.withValues(alpha: 0.6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: const Text(
-                        "Discard",
-                        style: TextStyle(
-                          fontSize: 18,
-                          letterSpacing: 1,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),

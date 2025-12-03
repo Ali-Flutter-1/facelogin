@@ -13,23 +13,19 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin{
+class _SplashScreenState extends State<SplashScreen> {
   final _storage = const FlutterSecureStorage();
-  late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 0));
-
-    _controller.forward();
     _checkTokenAndNavigate();
   }
 
   Future<void> _checkTokenAndNavigate() async {
     final accessToken = await _storage.read(key: "access_token");
 
-    await Future.delayed(const Duration(seconds: 3)); // smooth transition
+    await Future.delayed(const Duration(seconds: 4)); // smooth transition
 
     if (accessToken != null && accessToken.isNotEmpty) {
       final isExpired = _isTokenExpired(accessToken);
@@ -95,39 +91,52 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 👇 Your logo image
               Image.asset(
                 'assets/images/logo.png',
                 width: 120,
                 height: 120,
               ),
 
-              Text(
-                  "The AI era is drowning in noise.",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
 
-                  ),
+              const SizedBox(height: 30),
+
+              // Title
+              Text(
+                "The AI era is drowning in noise.",
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
+                textAlign: TextAlign.center,
+              ),
 
               const SizedBox(height: 10),
+
+              // Description
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child:  Center(
-                  child: Text(
-                    "Pollus verifies identity, credentials, and responses—instantly—so you can trust every insight and eliminate friction.",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),textAlign: TextAlign.center,
+                padding: const EdgeInsets.symmetric(horizontal: 32.0,),
+                child: Text(
+                  "Pollus verifies identity, credentials, and responses—instantly—so you can trust every insight and eliminate friction.",
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 13,
+                    height: 1.5,
+                    letterSpacing: 0.3,
                   ),
+                  textAlign: TextAlign.center,
                 ),
               ),
 
-              const SizedBox(height: 40),
-
+              const SizedBox(height: 60),
             ],
           ),
         ),
