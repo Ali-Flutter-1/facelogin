@@ -9,7 +9,7 @@
     <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
 
     <application
-        android:label="Pollus"
+        android:label="Valyd"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

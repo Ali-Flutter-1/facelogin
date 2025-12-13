@@ -54,7 +54,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
     _initializeCameraSilently();
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
-        performanceMode: FaceDetectorMode.accurate,
+        performanceMode: FaceDetectorMode.fast, // Changed from accurate to fast
         enableContours: false,
         enableLandmarks: false,
         minFaceSize: 0.15, // Minimum 15% of image - prevents thumbs/small objects
@@ -111,6 +111,8 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
     }
   }
   bool _isDetectingFrame = false;
+  DateTime? _lastProcessedFrameTime;
+  static const Duration _frameThrottleDuration = Duration(milliseconds: 200);
 
   /// Check if detected face meets quality requirements
   /// This prevents false positives like thumbs, small objects, etc.
@@ -167,8 +169,16 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
     if (_cameraController!.value.isStreamingImages) return;
 
     _cameraController!.startImageStream((CameraImage cameraImage) async {
+      // Frame throttling - skip frames if processing too frequently
+      final now = DateTime.now();
+      if (_lastProcessedFrameTime != null && 
+          now.difference(_lastProcessedFrameTime!) < _frameThrottleDuration) {
+        return; // Skip this frame to prevent overload
+      }
+      
       if (_isDetectingFrame || _faceDetected) return;
       _isDetectingFrame = true;
+      _lastProcessedFrameTime = now;
 
       try {
         // Convert planes to bytes
@@ -744,9 +754,9 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                         child: Opacity(
                           opacity: clampedValue,
                           child: Image.asset(
-                            'assets/images/logo.png',
-                            width: 80,
-                            height: 80,
+                            'assets/images/valydlogo.png',
+                            width: 120,
+                            height: 120,
                           ),
                         ),
                       );

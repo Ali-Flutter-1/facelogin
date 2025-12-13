@@ -92,9 +92,9 @@ class _SplashScreenState extends State<SplashScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Image.asset(
-                'assets/images/logo.png',
-                width: 120,
-                height: 120,
+                'assets/images/valydlogo.png',
+                width: 150,
+                height: 150,
               ),
 
 
@@ -125,7 +125,7 @@ class _SplashScreenState extends State<SplashScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32.0,),
                 child: Text(
-                  "Pollus verifies identity, credentials, and responses—instantly—so you can trust every insight and eliminate friction.",
+                  "Valyd verifies identity, credentials, and responses—instantly—so you can trust every insight and eliminate friction.",
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 13,
