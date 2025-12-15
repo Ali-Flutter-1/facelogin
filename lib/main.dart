@@ -1,6 +1,6 @@
 
 import 'package:facelogin/screens/splash/splash_screen.dart';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -27,3 +27,4 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+// flutter run -d 00008030-000224D10C86402E --profile_screen

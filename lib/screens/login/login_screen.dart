@@ -827,31 +827,36 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                     const SizedBox(height: 12),
 
                     // 🔵 SUB TEXT
-                    Text(
-                      _isProcessing
-                          ? (_subStatusMessage.isNotEmpty
-                          ? _subStatusMessage
-                          : 'Processing your face...')
-                          : _showTryAgainButton
-                          ? "Center your face and look at the camera for 5-6 s\nwe are hashing your vector and creating your account"
-                          : "Center your face and look at the camera for 5-6 s\nwe are hashing your vector and creating your account",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.75),
-                        height: 1.4,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      child: Text(
+                        _isProcessing
+                            ? (_subStatusMessage.isNotEmpty
+                            ? _subStatusMessage
+                            : 'Processing your face...')
+                            : _showTryAgainButton
+                            ? "Center your face and look at the camera for 5-6 s\nwe are hashing your vector and creating your account"
+                            : "Center your face and look at the camera for 5-6 s\nwe are hashing your vector and creating your account",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.75),
+                          height: 1.4,
+                        ),
                       ),
                     ),
 
                     const SizedBox(height: 20),
-                    Text(
-                      "Your video never leaves your device except for secure matching",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.85),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      child: Text(
+                        "Your video never leaves your device except for secure matching",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
                       ),
-
                     ),
 
                     // 🔵 TRY AGAIN button (only when failed)

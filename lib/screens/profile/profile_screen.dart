@@ -147,7 +147,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    letterSpacing: 0.5,
+                    letterSpacing: 0.8,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -157,7 +157,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
+                    letterSpacing: 0.7,
                   ),
                 ),
               ],
@@ -285,12 +285,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                       borderRadius: BorderRadius.circular(5)
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6.0,vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0,vertical: 6),
                     child: Text('Verify KYC', style: TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.9,
                     ))
                   ),
                 ),
@@ -381,7 +381,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       const SizedBox(height: 5),
                       Text(
                         _fullName ?? 'Full Name',
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        style: const TextStyle(color: Colors.white, fontSize: 18),
                       ),
                       Text(
                         _joinedDate ?? '',
@@ -459,9 +459,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             "Verify Your ID",
                                             style: const TextStyle(
                                               color: Colors.white,
-                                              fontWeight: FontWeight.bold,
+                                              fontWeight: FontWeight.w700,
                                               fontSize: 18,
-                                              letterSpacing: 0.5,
+                                              letterSpacing: 0.9,
                                             ),
                                           ),
                                           const SizedBox(height: 6),
@@ -469,7 +469,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             "Please verify your identity to continue",
                                             style: TextStyle(
                                               color: Colors.white.withValues(alpha: 0.85),
-                                              fontSize: 14,
+                                              fontSize: 16,
                                               fontWeight: FontWeight.w400,
                                             ),
                                           ),

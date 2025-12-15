@@ -102,12 +102,12 @@ class _SplashScreenState extends State<SplashScreen> {
 
               // Title
               Text(
-                "The AI era is drowning in noise.",
+                "The AI era is drowning in noise",
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
-                  letterSpacing: 0.5,
+                  letterSpacing: 0.8,
                   shadows: [
                     Shadow(
                       color: Colors.black.withValues(alpha: 0.5),
@@ -130,7 +130,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 13,
                     height: 1.5,
-                    letterSpacing: 0.3,
+                    letterSpacing: 0.8,
                   ),
                   textAlign: TextAlign.center,
                 ),

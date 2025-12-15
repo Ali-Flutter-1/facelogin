@@ -393,7 +393,7 @@ class _PremiumButtonState extends State<PremiumButton>
                             color: widget.textColor ?? Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
+                            letterSpacing: 0.9,
                           ),
                         ),
                       ],
