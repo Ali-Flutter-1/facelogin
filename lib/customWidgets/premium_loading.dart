@@ -72,10 +72,12 @@ class PremiumLoadingOverlay extends StatelessWidget {
                 Text(
                   message!,
                   style: const TextStyle(
+                    fontFamily: 'OpenSans',
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
+                    letterSpacing: 0.3,
+                    height: 1.3,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -85,9 +87,12 @@ class PremiumLoadingOverlay extends StatelessWidget {
                 Text(
                   subMessage!,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 14,
+                    fontFamily: 'OpenSans',
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 15,
                     fontWeight: FontWeight.w400,
+                    letterSpacing: 0.2,
+                    height: 1.4,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -390,10 +395,11 @@ class _PremiumButtonState extends State<PremiumButton>
                         Text(
                           widget.loadingText!,
                           style: TextStyle(
+                            fontFamily: 'OpenSans',
                             color: widget.textColor ?? Colors.white,
                             fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.9,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ],
@@ -414,10 +420,11 @@ class _PremiumButtonState extends State<PremiumButton>
                       Text(
                         widget.text,
                         style: TextStyle(
+                          fontFamily: 'OpenSans',
                           color: widget.textColor ?? Colors.white,
                           fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ],

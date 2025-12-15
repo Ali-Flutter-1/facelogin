@@ -40,9 +40,11 @@ class _KycScreenState extends State<KycScreen> {
           title: const Text(
             'KYC Verification',
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+              fontFamily: 'OpenSans',
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
               color: Colors.white,
+              letterSpacing: 0.5,
             ),
           ),
           centerTitle: true,
@@ -183,7 +185,13 @@ class _KycScreenState extends State<KycScreen> {
                             icon: const Icon(Icons.arrow_back, color: Colors.white70),
                             label: const Text(
                               "Previous",
-                              style: TextStyle(color: Colors.white70, fontSize: 16),
+                              style: TextStyle(
+                                fontFamily: 'OpenSans',
+                                color: Colors.white70,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                              ),
                             ),
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -246,9 +254,12 @@ class _KycScreenState extends State<KycScreen> {
                        Text(
                         'Verifying...',
                         style: TextStyle(
+                          fontFamily: 'OpenSans',
                           color: Colors.blue.shade600,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                          height: 1.3,
                         ),
                       ),
                     ],
@@ -289,8 +300,9 @@ class _KycScreenState extends State<KycScreen> {
                 : Text(
               '$step',
               style: TextStyle(
+                fontFamily: 'OpenSans',
                 color: Colors.white.withValues(alpha: 0.7),
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -299,9 +311,12 @@ class _KycScreenState extends State<KycScreen> {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.8),
-            fontSize: 12,
-            fontWeight: isCompleted ? FontWeight.w600 : FontWeight.normal,
+            fontFamily: 'OpenSans',
+            color: Colors.white.withOpacity(0.8),
+            fontSize: 13,
+            fontWeight: isCompleted ? FontWeight.w600 : FontWeight.w400,
+            letterSpacing: 0.2,
+            height: 1.4,
           ),
         ),
       ],
@@ -340,17 +355,24 @@ Widget _uploadStep({
                 Text(
                   title,
                   style: const TextStyle(
+                    fontFamily: 'OpenSans',
                     color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                    height: 1.3,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   description,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 14,
+                    fontFamily: 'OpenSans',
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0.2,
+                    height: 1.4,
                   ),
                 ),
               ],
@@ -390,8 +412,11 @@ Widget _uploadStep({
                   Text(
                     isUploading ? "Uploading..." : "Tap to select from gallery",
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 14,
+                      fontFamily: 'OpenSans',
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.2,
                     ),
                   ),
                 ],
@@ -445,9 +470,11 @@ Widget _uploadStep({
                       Text(
                         "Uploading image...",
                         style: TextStyle(
+                          fontFamily: 'OpenSans',
                           color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
                         ),
                       ),
                     ],
@@ -502,17 +529,24 @@ Widget _reviewStep({
                 const Text(
                   "Review Your Uploads",
                   style: TextStyle(
+                    fontFamily: 'OpenSans',
                     color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                    height: 1.3,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   "Make sure both images are clear before submitting",
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 14,
+                    fontFamily: 'OpenSans',
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0.2,
+                    height: 1.4,
                   ),
                 ),
               ],
@@ -555,9 +589,12 @@ Widget _buildPreviewCard(String label, XFile? file, bool isUploaded, bool isUplo
             Text(
               label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.8),
-                fontSize: 14,
+                fontFamily: 'OpenSans',
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+                height: 1.4,
               ),
             ),
             if (isUploading)
@@ -605,11 +642,14 @@ Widget _buildPreviewCard(String label, XFile? file, bool isUploaded, bool isUplo
                   return Container(
                     color: Colors.white.withValues(alpha: 0.1),
                     child: Center(
-                      child: Text(
+                      child:                       Text(
                         "Error",
                         style: TextStyle(
+                          fontFamily: 'OpenSans',
                           color: Colors.red.shade300,
-                          fontSize: 12,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0.1,
                         ),
                       ),
                     ),

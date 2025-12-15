@@ -65,7 +65,8 @@ SnackBar _createCustomSnackBar(String message, {bool isError = false}) {
         child: Text(
           message,
           style: const TextStyle(
-            fontWeight: FontWeight.w500,
+            fontFamily: 'OpenSans',
+            fontWeight: FontWeight.w600,
             fontSize: 14,
             color: Colors.white,
             height: 1.3,

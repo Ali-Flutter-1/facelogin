@@ -105,9 +105,10 @@ class _SplashScreenState extends State<SplashScreen> {
                 "The AI era is drowning in noise",
                 style: TextStyle(
                   fontSize: 22,
-                  fontWeight: FontWeight.bold,
+                  fontFamily: 'OpenSans',
+                  fontWeight: FontWeight.w900,
                   color: Colors.white,
-                  letterSpacing: 0.8,
+                  height: 1.3,
                   shadows: [
                     Shadow(
                       color: Colors.black.withValues(alpha: 0.5),
@@ -123,14 +124,16 @@ class _SplashScreenState extends State<SplashScreen> {
 
               // Description
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0,),
+                padding: const EdgeInsets.symmetric(horizontal: 32.0,vertical:12),
                 child: Text(
-                  "Valyd verifies identity, credentials, and responses—instantly—so you can trust every insight and eliminate friction.",
+                  "Valyd verifies identity,credentials, and responses—instantly—so you can trust every insight and eliminate friction",
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 13,
+                    fontFamily: 'OpenSans',
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.2,
                     height: 1.5,
-                    letterSpacing: 0.8,
                   ),
                   textAlign: TextAlign.center,
                 ),

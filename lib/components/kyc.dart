@@ -37,77 +37,243 @@ class KycController extends GetxController {
         return null;
       }
 
+      // Validate image file
+      if (imageFile.path.isEmpty && !kIsWeb) {
+        showCustomToast(context, "Invalid image file. Please try again.", isError: true);
+        return null;
+      }
+
       final uploadUrl = Uri.parse('https://idp.pollus.tech/api/auth/images/upload/');
       var request = http.MultipartRequest('POST', uploadUrl);
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json, text/plain, */*';
 
+      // Detect image format and set proper content type
+      String? imageExtension;
+      MediaType? contentType;
+      
       if (kIsWeb) {
         final bytes = await imageFile.readAsBytes();
-        final fileName = imageFile.name.isNotEmpty ? imageFile.name : 'image.png';
+        final fileName = imageFile.name.isNotEmpty ? imageFile.name : 'image.jpg';
+        
+        // Detect format from file name or bytes
+        imageExtension = fileName.toLowerCase().split('.').last;
+        if (imageExtension == 'jpg' || imageExtension == 'jpeg') {
+          contentType = MediaType('image', 'jpeg');
+        } else if (imageExtension == 'png') {
+          contentType = MediaType('image', 'png');
+        } else {
+          // Default to JPEG
+          contentType = MediaType('image', 'jpeg');
+          imageExtension = 'jpg';
+        }
+        
         final uint8List = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
 
         request.files.add(http.MultipartFile(
           fieldName,
           Stream.value(uint8List),
           uint8List.length,
-          filename: fileName,
-          contentType: MediaType('image', 'png'),
+          filename: imageFile.name,
+          contentType: contentType,
         ));
       } else {
+        // For mobile, detect format from file path
+        final path = imageFile.path.toLowerCase();
+        if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+          contentType = MediaType('image', 'jpeg');
+        } else if (path.endsWith('.png')) {
+          contentType = MediaType('image', 'png');
+        } else {
+          // Default to JPEG
+          contentType = MediaType('image', 'jpeg');
+        }
+        
         request.files.add(await http.MultipartFile.fromPath(
           fieldName,
           imageFile.path,
+          contentType: contentType,
         ));
       }
+      
+      print("📤 Uploading $fieldName (${contentType?.mimeType ?? 'unknown'}) to $uploadUrl");
 
       print("📤 Uploading $fieldName to $uploadUrl");
-      var streamed = await request.send();
+      
+      // Add timeout to prevent hanging
+      var streamed = await request.send().timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          throw TimeoutException('Image upload timed out after 60 seconds');
+        },
+      );
+      
       var responseBody = await streamed.stream.bytesToString();
       final response = http.Response(responseBody, streamed.statusCode);
 
       print("📤 Upload response (${response.statusCode}): ${response.body}");
+      
+      // Log response details for debugging
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        print("❌ Upload failed - Status: ${response.statusCode}, Body: ${response.body}");
+      }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         try {
           final data = json.decode(response.body);
 
           String? imageId;
+          
+          // Safely extract image ID, handling cases where it might be false, null, or a string
           if (fieldName == 'id_front_image') {
-            imageId = data['data']?['front_image_id'];
+            final frontIdValue = data['data']?['front_image_id'];
+            // Check if it's a valid string (not false, null, or empty)
+            if (frontIdValue != null && frontIdValue != false && frontIdValue.toString().trim().isNotEmpty) {
+              imageId = frontIdValue.toString().trim();
+            } else if (frontIdValue == false) {
+              // If explicitly false, the upload failed on server side
+              print("❌ Server returned false for front_image_id - upload may have failed");
+              showCustomToast(context, "Image upload failed. Please try again.", isError: true);
+              return null;
+            }
+            // Try to get from front_url if ID is not available
+            if ((imageId == null || imageId.isEmpty) && frontIdValue != false) {
+              final frontUrl = data['data']?['front_url'];
+              if (frontUrl != null && frontUrl != false && frontUrl.toString().trim().isNotEmpty) {
+                // Extract ID from URL path if possible
+                final urlString = frontUrl.toString().trim();
+                // Check if URL is complete (not just /storage/)
+                if (urlString.endsWith('/storage/') || urlString.endsWith('/storage')) {
+                  print("⚠️ Incomplete front_url received: $urlString");
+                  showCustomToast(context, "Image upload incomplete. Please try again.", isError: true);
+                  return null;
+                }
+                // Try to extract ID from URL (e.g., /storage/12345/image.jpg -> 12345)
+                final urlParts = urlString.split('/').where((p) => p.isNotEmpty && p != 'storage').toList();
+                if (urlParts.isNotEmpty) {
+                  // Use the first meaningful part as potential ID
+                  final potentialId = urlParts.first;
+                  if (potentialId.isNotEmpty) {
+                    imageId = potentialId;
+                    print("⚠️ Extracted ID from front_url: $imageId");
+                  } else {
+                    // Use full URL as fallback
+                    imageId = urlString;
+                    print("⚠️ Using full front_url as fallback: $imageId");
+                  }
+                } else {
+                  imageId = urlString;
+                  print("⚠️ Using front_url as fallback: $imageId");
+                }
+              }
+            }
           } else if (fieldName == 'id_back_image') {
-            imageId = data['data']?['back_image_id'];
+            final backIdValue = data['data']?['back_image_id'];
+            // Check if it's a valid string (not false, null, or empty)
+            if (backIdValue != null && backIdValue != false && backIdValue.toString().trim().isNotEmpty) {
+              imageId = backIdValue.toString().trim();
+            } else if (backIdValue == false) {
+              // If explicitly false, the upload failed on server side
+              print("❌ Server returned false for back_image_id - upload may have failed");
+              showCustomToast(context, "Image upload failed. Please try again.", isError: true);
+              return null;
+            }
+            // Try to get from back_url if ID is not available
+            if ((imageId == null || imageId.isEmpty) && backIdValue != false) {
+              final backUrl = data['data']?['back_url'];
+              if (backUrl != null && backUrl != false && backUrl.toString().trim().isNotEmpty) {
+                // Extract ID from URL path if possible
+                final urlString = backUrl.toString().trim();
+                // Check if URL is complete (not just /storage/)
+                if (urlString.endsWith('/storage/') || urlString.endsWith('/storage')) {
+                  print("⚠️ Incomplete back_url received: $urlString");
+                  showCustomToast(context, "Image upload incomplete. Please try again.", isError: true);
+                  return null;
+                }
+                // Try to extract ID from URL (e.g., /storage/12345/image.jpg -> 12345)
+                final urlParts = urlString.split('/').where((p) => p.isNotEmpty && p != 'storage').toList();
+                if (urlParts.isNotEmpty) {
+                  // Use the first meaningful part as potential ID
+                  final potentialId = urlParts.first;
+                  if (potentialId.isNotEmpty) {
+                    imageId = potentialId;
+                    print("⚠️ Extracted ID from back_url: $imageId");
+                  } else {
+                    // Use full URL as fallback
+                    imageId = urlString;
+                    print("⚠️ Using full back_url as fallback: $imageId");
+                  }
+                } else {
+                  imageId = urlString;
+                  print("⚠️ Using back_url as fallback: $imageId");
+                }
+              }
+            }
           }
 
-          // Fallback to other possible formats
-          imageId ??= data['id'] ??
-              data['file_id'] ??
-              data['image_id'] ??
-              data['path'] ??
-              data['url'] ??
-              data['data']?['id'] ??
-              data['data']?['file_id'] ??
-              data['data']?['image_id'] ??
-              data['data']?['path'] ??
-              data['data']?['url'];
+          // Fallback to other possible formats (only if still null)
+          if (imageId == null || imageId.isEmpty) {
+            final fallbackId = data['id'] ??
+                data['file_id'] ??
+                data['image_id'] ??
+                data['path'] ??
+                data['url'] ??
+                data['data']?['id'] ??
+                data['data']?['file_id'] ??
+                data['data']?['image_id'] ??
+                data['data']?['path'] ??
+                data['data']?['url'];
+            
+            if (fallbackId != null && fallbackId != false && fallbackId.toString().isNotEmpty) {
+              imageId = fallbackId.toString();
+            }
+          }
 
-          if (imageId != null) {
+          if (imageId != null && imageId.isNotEmpty) {
             print("✅ Image uploaded successfully, ID: $imageId");
-            return imageId.toString();
+            return imageId;
           } else {
-            print("⚠️ Upload succeeded but no ID found in response: $data");
+            print("⚠️ Upload succeeded but no valid ID found in response: $data");
+            showCustomToast(context, "Image uploaded but ID not received. Please try again.", isError: true);
           }
         } catch (e) {
           print("❌ Failed to parse upload response: $e");
+          print("❌ Response body was: ${response.body}");
+          showCustomToast(context, "Failed to process upload response. Please try again.", isError: true);
         }
       } else {
         print("❌ Upload failed with status ${response.statusCode}: ${response.body}");
+        
+        // Try to parse error message from response
+        String errorMessage = "Upload failed. Please try again.";
+        try {
+          final errorData = json.decode(response.body);
+          if (errorData is Map) {
+            errorMessage = errorData['error']?['message'] ?? 
+                          errorData['message'] ?? 
+                          errorData['error']?.toString() ?? 
+                          errorMessage;
+          }
+        } catch (_) {
+          // If can't parse, use default message
+        }
+        
+        showCustomToast(context, errorMessage, isError: true);
       }
 
       return null;
+    } on TimeoutException catch (e) {
+      print("❌ Upload timeout: $e");
+      showCustomToast(context, "Upload timed out. Please check your connection and try again.", isError: true);
+      return null;
+    } on http.ClientException catch (e) {
+      print("❌ Network error: $e");
+      showCustomToast(context, "Network error. Please check your connection and try again.", isError: true);
+      return null;
     } catch (e) {
       print("❌ Error uploading image: $e");
-      showCustomToast(context, "Failed to upload image. Please try again.", isError: true);
+      print("❌ Error type: ${e.runtimeType}");
+      showCustomToast(context, "Failed to upload image: ${e.toString()}. Please try again.", isError: true);
       return null;
     }
   }
@@ -115,40 +281,93 @@ class KycController extends GetxController {
   // 📸 Pick image and upload it immediately
   Future<void> pickImage(bool isFront, ImageSource source) async {
     try {
-      final picked = await picker.pickImage(source: source, imageQuality: 80);
+      // Use higher quality for better image recognition, but compress to reasonable size
+      final picked = await picker.pickImage(
+        source: source,
+        imageQuality: 85, // Good balance between quality and file size
+        maxWidth: 1920, // Limit width to prevent huge files
+        maxHeight: 1920, // Limit height to prevent huge files
+      );
+      
       if (picked != null) {
+        // Validate file exists and is readable
+        try {
+          final fileSize = await picked.length();
+          if (fileSize == 0) {
+            showCustomToast(Get.context!, "Image file is empty. Please try again.", isError: true);
+            return;
+          }
+          // Check file size (max 10MB)
+          if (fileSize > 10 * 1024 * 1024) {
+            showCustomToast(Get.context!, "Image is too large. Please choose a smaller image.", isError: true);
+            return;
+          }
+          print("📸 Selected image: ${picked.path}, size: ${(fileSize / 1024).toStringAsFixed(2)} KB");
+        } catch (e) {
+          print("⚠️ Error reading image file: $e");
+          showCustomToast(Get.context!, "Cannot read image file. Please try again.", isError: true);
+          return;
+        }
+        
         if (isFront) {
           frontImage.value = picked;
           // Upload front image immediately
           isUploadingFront.value = true;
-          final imageId = await uploadImageToServer(picked, 'id_front_image', Get.context!);
-          isUploadingFront.value = false;
-          if (imageId != null) {
-            frontImageId.value = imageId;
-          } else {
-            showCustomToast(Get.context!, "Failed to upload front image", isError: true);
+          try {
+            final imageId = await uploadImageToServer(picked, 'id_front_image', Get.context!);
+            isUploadingFront.value = false;
+            if (imageId != null && imageId.isNotEmpty) {
+              frontImageId.value = imageId;
+              print("✅ Front image uploaded successfully with ID: $imageId");
+              showCustomToast(Get.context!, "Front image uploaded successfully!");
+            } else {
+              print("❌ Front image upload returned null ID");
+              showCustomToast(Get.context!, "Failed to upload front image. Please try again.", isError: true);
+              frontImage.value = null; // Clear the image if upload failed
+            }
+          } catch (e) {
+            isUploadingFront.value = false;
+            print("❌ Error uploading front image: $e");
+            showCustomToast(Get.context!, "Failed to upload front image: ${e.toString()}", isError: true);
+            frontImage.value = null; // Clear the image on error
           }
         } else {
           backImage.value = picked;
           // Upload back image immediately
           isUploadingBack.value = true;
-          final imageId = await uploadImageToServer(picked, 'id_back_image', Get.context!);
-          isUploadingBack.value = false;
-          if (imageId != null) {
-            backImageId.value = imageId;
-          } else {
-            showCustomToast(Get.context!, "Failed to upload back image", isError: true);
+          try {
+            final imageId = await uploadImageToServer(picked, 'id_back_image', Get.context!);
+            isUploadingBack.value = false;
+            if (imageId != null && imageId.isNotEmpty) {
+              backImageId.value = imageId;
+              print("✅ Back image uploaded successfully with ID: $imageId");
+              showCustomToast(Get.context!, "Back image uploaded successfully!");
+            } else {
+              print("❌ Back image upload returned null ID");
+              showCustomToast(Get.context!, "Failed to upload back image. Please try again.", isError: true);
+              backImage.value = null; // Clear the image if upload failed
+            }
+          } catch (e) {
+            isUploadingBack.value = false;
+            print("❌ Error uploading back image: $e");
+            showCustomToast(Get.context!, "Failed to upload back image: ${e.toString()}", isError: true);
+            backImage.value = null; // Clear the image on error
           }
         }
+      } else {
+        print("ℹ️ User cancelled image selection");
+        // Don't show error if user just cancelled
       }
     } catch (e) {
       if (isFront) {
         isUploadingFront.value = false;
+        frontImage.value = null;
       } else {
         isUploadingBack.value = false;
+        backImage.value = null;
       }
-      showCustomToast(Get.context!, "Failed to select image. Please try again.", isError: true);
-      debugPrint("Image pick error: $e");
+      print("❌ Image pick error: $e");
+      showCustomToast(Get.context!, "Failed to select image: ${e.toString()}. Please try again.", isError: true);
     }
   }
 

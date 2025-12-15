@@ -158,18 +158,18 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
       return;
     }
 
-    // Only include first_name and last_name if id_verified is false
+    // Only include first_name, last_name, and dob if id_verified is false
     // If id_verified is true, these fields are read-only and shouldn't be updated
     final Map<String, dynamic> bodyData = {
-      "dob": _dobController.text.trim(),
       "phone": _phoneController.text.trim(),
       "email": _emailController.text.trim(),
     };
     
-    // Only add first_name and last_name if user is not verified
+    // Only add first_name, last_name, and dob if user is not verified
     if (!_idVerified) {
       bodyData["first_name"] = _firstNameController.text.trim();
       bodyData["last_name"] = _lastNameController.text.trim();
+      bodyData["dob"] = _dobController.text.trim();
     }
     
     final body = jsonEncode(bodyData);
@@ -210,9 +210,11 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
         title: const Text(
           'Edit Profile',
           style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
+            fontFamily: 'OpenSans',
+            fontSize: 26,
+            fontWeight: FontWeight.w600,
             color: Colors.white,
+            letterSpacing: 0.5,
           ),
         ),
         centerTitle: true,
@@ -308,8 +310,8 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
                           CustomInnerInputField(
                             label: 'Date of Birth',
                             controller: _dobController,
-                            readOnly: _idVerified,
-                            onTap: () => _selectDate(context),
+                            readOnly: _idVerified, // Read-only if id_verified is true
+                            onTap: _idVerified ? null : () => _selectDate(context), // Disable date picker if verified
                             icon: Icons.calendar_today_outlined,
                             hintText: 'Select your birth date',
                           ),

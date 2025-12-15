@@ -37,9 +37,12 @@ class CustomInnerInputField extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
+              fontFamily: 'OpenSans',
               fontSize: 16,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
               color: Colors.white,
+              letterSpacing: 0.2,
+              height: 1.4,
             ),
           ),
           const SizedBox(height: 8),
@@ -53,7 +56,13 @@ class CustomInnerInputField extends StatelessWidget {
               maxLines: 1,
               readOnly: readOnly,
               onTap: onTap,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+              style: const TextStyle(
+                fontFamily: 'OpenSans',
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 0.2,
+              ),
               validator: validator ??
                       (value) {
                     if (!readOnly && (value?.isEmpty ?? true)) {
@@ -67,8 +76,11 @@ class CustomInnerInputField extends StatelessWidget {
                     ? Icon(icon, color: Colors.white70, size: 22)
                     : null,
                 hintStyle: const TextStyle(
+                  fontFamily: 'OpenSans',
                   color: Colors.white70,
-                  fontSize: 14,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 0.1,
                 ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
