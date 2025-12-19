@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:facelogin/components/kyc.dart';
 import 'package:facelogin/screens/kyc/kyc_screen.dart';
+import 'package:facelogin/screens/linkDevice/link_device_screen.dart';
 import 'package:facelogin/screens/profile/profile_update_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -505,11 +506,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             icon: Icons.upload_file_rounded,
                                             height: 48,
                                             width: null,
-                                            onPressed: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(builder: (context) => const KycScreen()),
-                                              );
+                                            onPressed: () async {
+                                              final result = await controller.showKycDialog(context);
+                                              // If KYC was successfully submitted, refresh the profile
+                                              if (result == true) {
+                                                await _fetchProfile();
+                                              }
                                             },
                                           ),
                                         ],
@@ -576,6 +578,24 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ],
                       ),
                       const SizedBox(height: 40),
+
+                      PremiumButton(
+                        backgroundColor: Colors.blue,
+                        textColor: Colors.white,
+                        text: 'Link Devices',
+                        icon: Icons.link,
+                        height: 60,
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                const LinkDeviceScreen()),
+                          );
+
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       PremiumButton(
                         text: 'Edit Information',
                         icon: Icons.edit_outlined,
@@ -616,11 +636,20 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> logout(BuildContext context) async {
     try {
-      // 1. Clear secure storage tokens
+      // 1. Clear only auth tokens and session keys (NOT E2E keys)
+      // E2E keys (SKd) must remain on device for future logins
       const secureStorage = FlutterSecureStorage();
-      await secureStorage.deleteAll();
+      
+      // Only delete auth tokens, preserve E2E keys
+      await secureStorage.delete(key: 'access_token');
+      await secureStorage.delete(key: 'refresh_token');
+      await secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
+      
+      // DO NOT delete:
+      // - e2e_skd (Device Private Key - must stay on device)
+      // - device_id (Device ID - must stay on device)
 
-      // 2. Clear SharedPreferences
+      // 2. Clear SharedPreferences (non-sensitive app data)
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
 

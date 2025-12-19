@@ -126,7 +126,11 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
       } else if (response.statusCode == 401) {
         debugPrint("ProfileScreen: Access token invalid or expired");
         showCustomToast(context, "Session expired. Please log in again.", isError: true);
-        await storage.deleteAll();
+        // Clear only auth tokens, preserve E2E keys (SKd) and device ID
+        await storage.delete(key: 'access_token');
+        await storage.delete(key: 'refresh_token');
+        await storage.delete(key: 'e2e_ku_session'); // Clear session key only
+        // DO NOT delete: e2e_skd, device_id
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),

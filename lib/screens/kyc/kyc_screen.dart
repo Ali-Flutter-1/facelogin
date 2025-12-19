@@ -140,23 +140,21 @@ class _KycScreenState extends State<KycScreen> {
                         children: [
                           if (controller.step.value == 1)
                             _uploadStep(
-                              title: "Upload Front of ID",
-                              description: "Take a clear photo of the front side of your ID card",
+                              title: "Capture Front of ID",
+                              description: "Take a clear photo of the front side of your ID card using the back camera",
                               icon: Icons.badge,
                               imageFile: controller.frontImage.value,
                               onPickCamera: () => controller.pickImage(true, ImageSource.camera),
-                              onPickGallery: () => controller.pickImage(true, ImageSource.gallery),
                               isUploaded: controller.frontImageId.value.isNotEmpty,
                               isUploading: controller.isUploadingFront.value,
                             ),
                           if (controller.step.value == 2)
                             _uploadStep(
-                              title: "Upload Back of ID",
-                              description: "Take a clear photo of the back side of your ID card",
+                              title: "Capture Back of ID",
+                              description: "Take a clear photo of the back side of your ID card using the back camera",
                               icon: Icons.badge_outlined,
                               imageFile: controller.backImage.value,
                               onPickCamera: () => controller.pickImage(false, ImageSource.camera),
-                              onPickGallery: () => controller.pickImage(false, ImageSource.gallery),
                               isUploaded: controller.backImageId.value.isNotEmpty,
                               isUploading: controller.isUploadingBack.value,
                             ),
@@ -330,7 +328,6 @@ Widget _uploadStep({
   required IconData icon,
   required XFile? imageFile,
   required VoidCallback onPickCamera,
-  required VoidCallback onPickGallery,
   required bool isUploaded,
   required bool isUploading,
 }) {
@@ -383,113 +380,110 @@ Widget _uploadStep({
 
       const SizedBox(height: 24),
 
-      // Image preview
-      GestureDetector(
-        onTap: isUploading ? null : onPickGallery,
-        child: Stack(
-          children: [
+      // Image preview - camera only, no gallery tap
+      Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            height: 200,
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: imageFile != null ? Colors.blue : Colors.white.withValues(alpha: 0.3),
+                width: 2,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white.withValues(alpha: 0.05),
+            ),
+            child: imageFile == null
+                ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.camera_alt_outlined,
+                  color: Colors.white.withValues(alpha: 0.5),
+                  size: 48,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  isUploading ? "Uploading..." : "No image captured yet",
+                  style: TextStyle(
+                    fontFamily: 'OpenSans',
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            )
+                : ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: kIsWeb
+                  ? FutureBuilder<Uint8List>(
+                future: imageFile?.readAsBytes(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return Image.memory(
+                      snapshot.data!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                    );
+                  }
+                  return Container(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    child: const Center(
+                      child: CircularProgressIndicator(color: Colors.blue),
+                    ),
+                  );
+                },
+              )
+                  : Image.file(
+                File(imageFile!.path),
+                fit: BoxFit.cover,
+                width: double.infinity,
+              ),
+            ),
+          ),
+          // Loading overlay when uploading
+          if (isUploading)
             Container(
               width: double.infinity,
               height: 200,
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: imageFile != null ? Colors.blue : Colors.white.withValues(alpha: 0.3),
-                  width: 2,
-                ),
                 borderRadius: BorderRadius.circular(16),
-                color: Colors.white.withValues(alpha: 0.05),
+                color: Colors.black.withValues(alpha: 0.5),
               ),
-              child: imageFile == null
-                  ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.cloud_upload_outlined,
-                    color: Colors.white.withValues(alpha: 0.5),
-                    size: 48,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    isUploading ? "Uploading..." : "Tap to select from gallery",
-                    style: TextStyle(
-                      fontFamily: 'OpenSans',
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w400,
-                      letterSpacing: 0.2,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(
+                      color: Colors.blue,
+                      strokeWidth: 3,
                     ),
-                  ),
-                ],
-              )
-                  : ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: kIsWeb
-                    ? FutureBuilder<Uint8List>(
-                  future: imageFile?.readAsBytes(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasData) {
-                      return Image.memory(
-                        snapshot.data!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      );
-                    }
-                    return Container(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      child: const Center(
-                        child: CircularProgressIndicator(color: Colors.blue),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Uploading image...",
+                      style: TextStyle(
+                        fontFamily: 'OpenSans',
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
                       ),
-                    );
-                  },
-                )
-                    : Image.file(
-                  File(imageFile!.path),
-                  fit: BoxFit.cover,
-                  width: double.infinity,
+                    ),
+                  ],
                 ),
               ),
             ),
-            // Loading overlay when uploading
-            if (isUploading)
-              Container(
-                width: double.infinity,
-                height: 200,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: Colors.black.withValues(alpha: 0.5),
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(
-                        color: Colors.blue,
-                        strokeWidth: 3,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        "Uploading image...",
-                        style: TextStyle(
-                          fontFamily: 'OpenSans',
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
+        ],
       ),
 
       const SizedBox(height: 16),
 
-      // Camera button
+      // Camera button - only option (back camera)
       PremiumButton(
-        text: "Capture from Camera",
+        text: "Capture Photo",
         icon: Icons.camera_alt,
         height: 50,
         isLoading: isUploading,

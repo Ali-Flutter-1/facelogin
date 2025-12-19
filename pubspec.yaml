@@ -46,6 +46,12 @@ dependencies:
   jwt_decoder: ^2.0.1
   image: ^4.1.7
   google_mlkit_face_detection: ^0.10.0
+  # E2E Encryption
+  pointycastle: ^3.7.3
+  crypto: ^3.0.5
+  device_info_plus: ^10.1.2
+  cryptography: ^2.7.0
+  mobile_scanner: ^7.1.4
 
 
 
@@ -59,12 +65,12 @@ flutter_launcher_icons:
   ios: true
   remove_alpha_ios: true
 
-  image_path: "assets/images/img.png"
+  image_path: "assets/images/mainvalydlogo.png"
   background_color: "#0A0E21"
 
   web:
     generate: true
-    image_path: "assets/images/img.png"
+    image_path: "assets/images/mainvalydlogo.png"
     background_color: "#0A0E21"
     theme_color: "#0A0E21"
 

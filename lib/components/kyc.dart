@@ -279,11 +279,14 @@ class KycController extends GetxController {
   }
 
   // 📸 Pick image and upload it immediately
+  // Only allows camera capture with back camera
   Future<void> pickImage(bool isFront, ImageSource source) async {
     try {
+      // Force camera source and back camera only
       // Use higher quality for better image recognition, but compress to reasonable size
       final picked = await picker.pickImage(
-        source: source,
+        source: ImageSource.camera, // Always use camera, ignore source parameter
+        preferredCameraDevice: CameraDevice.rear, // Force back camera only
         imageQuality: 85, // Good balance between quality and file size
         maxWidth: 1920, // Limit width to prevent huge files
         maxHeight: 1920, // Limit height to prevent huge files

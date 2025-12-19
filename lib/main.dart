@@ -1,13 +1,19 @@
-
 import 'package:facelogin/screens/splash/splash_screen.dart';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Lock app to portrait mode only
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
   runApp(const MyApp());
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -16,7 +22,6 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return GetMaterialApp(
       useInheritedMediaQuery: true,
-
       debugShowCheckedModeBanner: false,
       title: 'Face Login Demo',
       theme: ThemeData(
@@ -46,3 +51,6 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
+
+// flutter run -d 00008030-000224D10C86402E --profile

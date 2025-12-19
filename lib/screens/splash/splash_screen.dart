@@ -38,8 +38,11 @@ class _SplashScreenState extends State<SplashScreen> {
         );
         return;
       } else {
-
-        await _storage.deleteAll();
+        // Token expired - clear only auth tokens, preserve E2E keys (SKd) and device ID
+        await _storage.delete(key: 'access_token');
+        await _storage.delete(key: 'refresh_token');
+        await _storage.delete(key: 'e2e_ku_session'); // Clear session key only
+        // DO NOT delete: e2e_skd, device_id
       }
     }
 

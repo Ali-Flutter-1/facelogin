@@ -1,7 +1,7 @@
 class AppConstants {
   // Image paths
   static const String logoPath = 'assets/images/valydlogo.png';
-  static const String launcherLogoPath = 'assets/images/img.png';
+
   static const String backgroundImagePath = 'assets/images/2.jpeg';
   static const String faceIconPath = 'assets/images/pngwing.com.png';
 

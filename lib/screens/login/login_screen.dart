@@ -7,6 +7,7 @@ import 'package:camera/camera.dart';
 import 'package:facelogin/constant/constant.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/screens/profile/profile_screen.dart';
+import 'package:facelogin/data/repositories/auth_repository.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
@@ -562,9 +563,11 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         if (responseData != null &&
             responseData["access_token"] != null &&
             responseData["refresh_token"] != null) {
-          await _storage.write(key: "access_token", value: responseData["access_token"]);
-          await _storage.write(key: "refresh_token", value: responseData["refresh_token"]);
-
+          // Use AuthRepository to handle E2E bootstrap
+          final authRepo = AuthRepository();
+          final authResult = await authRepo.loginOrRegister(bytes);
+          
+          // Continue even if E2E failed (non-blocking)
           showCustomToast(context, "Face login successful!");
           await Future.delayed(const Duration(milliseconds: 500));
 
@@ -697,9 +700,11 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         if (responseData != null &&
             responseData["access_token"] != null &&
             responseData["refresh_token"] != null) {
-          await _storage.write(key: "access_token", value: responseData["access_token"]);
-          await _storage.write(key: "refresh_token", value: responseData["refresh_token"]);
-
+          // Use AuthRepository to handle E2E bootstrap
+          final authRepo = AuthRepository();
+          final authResult = await authRepo.loginOrRegister(bytes);
+          
+          // Continue even if E2E failed (non-blocking)
           showCustomToast(context, "Face login successful!");
           await Future.delayed(const Duration(milliseconds: 500));
 
