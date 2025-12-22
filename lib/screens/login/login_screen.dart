@@ -6,8 +6,10 @@ import 'dart:io' show Platform;
 import 'package:camera/camera.dart';
 import 'package:facelogin/constant/constant.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
+import 'package:facelogin/customWidgets/device_pairing_dialog.dart';
 import 'package:facelogin/screens/profile/profile_screen.dart';
 import 'package:facelogin/data/repositories/auth_repository.dart';
+import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
@@ -567,7 +569,31 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
           
-          // Continue even if E2E failed (non-blocking)
+          // Check if pairing is required
+          if (authResult.needsPairing) {
+            // Show pairing dialog
+            await _handleDevicePairing(context, authRepo);
+            return;
+          }
+          
+          // Check if E2E encryption setup failed
+          if (authResult.isError) {
+            setState(() {
+              _isProcessing = false;
+              _statusMessage = '';
+              _subStatusMessage = '';
+              _faceGuidanceMessage = '';
+            });
+            showCustomToast(context, authResult.error ?? "E2E encryption setup failed. Please try again.", isError: true);
+            setState(() {
+              _faceDetected = false;
+              _faceGuidanceMessage = '';
+            });
+            _handleRetry();
+            return;
+          }
+          
+          // E2E encryption successful - proceed to dashboard
           showCustomToast(context, "Face login successful!");
           await Future.delayed(const Duration(milliseconds: 500));
 
@@ -600,6 +626,8 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         });
 
         String errorCode = "Face recognition failed. Please try again.";
+        bool isUserDeleted = false;
+        
         try {
           final errorData = jsonDecode(response.body);
           if (errorData is Map && errorData.containsKey('error')) {
@@ -609,7 +637,29 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               errorCode = errorData['error'].toString();
             }
           }
-        } catch (_) {}
+          
+          // Check if user is deleted (401, 403, 404)
+          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
+            isUserDeleted = true;
+            errorCode = "Your account has been deleted or is no longer available. Please contact support.";
+            
+            // Clear all tokens and redirect to login
+            await _storage.delete(key: 'access_token');
+            await _storage.delete(key: 'refresh_token');
+            await _storage.delete(key: 'e2e_ku_session');
+          }
+        } catch (_) {
+          // If parsing fails but status code indicates deleted user
+          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
+            isUserDeleted = true;
+            errorCode = "Your account has been deleted or is no longer available. Please contact support.";
+            
+            // Clear all tokens
+            await _storage.delete(key: 'access_token');
+            await _storage.delete(key: 'refresh_token');
+            await _storage.delete(key: 'e2e_ku_session');
+          }
+        }
 
         showCustomToast(context, errorCode, isError: true);
 
@@ -617,6 +667,8 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           _faceDetected = false;
           _faceGuidanceMessage = '';
         });
+        
+        // If user is deleted, we've already cleared tokens, just retry (which will show login screen)
         _handleRetry();
       }
     } catch (e) {
@@ -704,7 +756,31 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
           
-          // Continue even if E2E failed (non-blocking)
+          // Check if pairing is required
+          if (authResult.needsPairing) {
+            // Show pairing dialog
+            await _handleDevicePairing(context, authRepo);
+            return;
+          }
+          
+          // Check if E2E encryption setup failed
+          if (authResult.isError) {
+            setState(() {
+              _isProcessing = false;
+              _statusMessage = '';
+              _subStatusMessage = '';
+              _faceGuidanceMessage = '';
+            });
+            showCustomToast(context, authResult.error ?? "E2E encryption setup failed. Please try again.", isError: true);
+            setState(() {
+              _faceDetected = false;
+              _faceGuidanceMessage = '';
+            });
+            _handleRetry();
+            return;
+          }
+          
+          // E2E encryption successful - proceed to dashboard
           showCustomToast(context, "Face login successful!");
           await Future.delayed(const Duration(milliseconds: 500));
 
@@ -737,6 +813,8 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         });
 
         String errorCode = "Face recognition failed. Please try again.";
+        bool isUserDeleted = false;
+        
         try {
           final errorData = jsonDecode(response.body);
           if (errorData is Map && errorData.containsKey('error')) {
@@ -746,7 +824,29 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               errorCode = errorData['error'].toString();
             }
           }
-        } catch (_) {}
+          
+          // Check if user is deleted (401, 403, 404)
+          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
+            isUserDeleted = true;
+            errorCode = "Your account has been deleted or is no longer available. Please contact support.";
+            
+            // Clear all tokens and redirect to login
+            await _storage.delete(key: 'access_token');
+            await _storage.delete(key: 'refresh_token');
+            await _storage.delete(key: 'e2e_ku_session');
+          }
+        } catch (_) {
+          // If parsing fails but status code indicates deleted user
+          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
+            isUserDeleted = true;
+            errorCode = "Your account has been deleted or is no longer available. Please contact support.";
+            
+            // Clear all tokens
+            await _storage.delete(key: 'access_token');
+            await _storage.delete(key: 'refresh_token');
+            await _storage.delete(key: 'e2e_ku_session');
+          }
+        }
 
         showCustomToast(context, errorCode, isError: true);
 
@@ -754,6 +854,8 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           _faceDetected = false;
           _faceGuidanceMessage = '';
         });
+        
+        // If user is deleted, we've already cleared tokens, just retry (which will show login screen)
         _handleRetry();
       }
     } catch (e) {
@@ -848,6 +950,162 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
 
     if (_isCameraInitialized && _cameraController != null) {
       _startFaceDetectionStream();
+    }
+  }
+
+  /// Handle device pairing flow when E2E is set up on another device
+  Future<void> _handleDevicePairing(BuildContext context, AuthRepository authRepo) async {
+    try {
+      final accessToken = await authRepo.getAccessToken();
+      if (accessToken == null) {
+        showCustomToast(context, 'Session expired. Please try again.', isError: true);
+        return;
+      }
+
+      final e2eService = E2EService();
+      
+      // Request pairing - this generates keys and gets OTP
+      final pairingResult = await e2eService.requestDevicePairing(accessToken);
+      
+      if (!pairingResult.isSuccess || pairingResult.otp == null) {
+        showCustomToast(
+          context,
+          pairingResult.error ?? 'Failed to request device pairing',
+          isError: true,
+        );
+        return;
+      }
+
+      // Show pairing dialog with OTP
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => DevicePairingDialog(
+          otp: pairingResult.otp!,
+          onCancel: () {
+            Navigator.pop(dialogContext);
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+            });
+          },
+          onApproved: () {
+            // This will be called when polling detects approval
+            Navigator.pop(dialogContext);
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              );
+            }
+          },
+        ),
+      );
+
+      // Poll bootstrap API for pairing approval in background
+      // Keep calling bootstrap until wrappedKu is received (after Device A approves)
+      _pollForPairingApproval(
+        context,
+        accessToken,
+      );
+    } catch (e) {
+      debugPrint('❌ Pairing error: $e');
+      showCustomToast(context, 'Failed to start pairing: ${e.toString()}', isError: true);
+    }
+  }
+
+  /// Poll bootstrap API for pairing approval
+  /// Keeps calling bootstrap until wrappedKu is received (after Device A approves)
+  Future<void> _pollForPairingApproval(
+    BuildContext context,
+    String accessToken,
+  ) async {
+    final e2eService = E2EService();
+    const maxAttempts = 60; // 2 minutes max (60 attempts * 2 seconds)
+    const pollInterval = Duration(seconds: 2);
+
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      await Future.delayed(pollInterval);
+
+      if (!mounted) return;
+
+      try {
+        // Poll bootstrap API - it will return wrappedKu once pairing is approved
+        final bootstrapResult = await e2eService.bootstrapForLogin(accessToken);
+
+        if (bootstrapResult.isSuccess) {
+          // Pairing approved and wrappedKu received!
+          debugPrint('✅ Pairing approved - wrappedKu received via bootstrap');
+          
+          // Close dialog if still open
+          if (mounted && Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+          
+          if (mounted) {
+            showCustomToast(context, "Device paired successfully!");
+            await Future.delayed(const Duration(milliseconds: 500));
+            
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              );
+            }
+          }
+          return;
+        } else if (bootstrapResult.needsPairing) {
+          // Still waiting for approval - continue polling
+          debugPrint('⏳ Still waiting for pairing approval... (attempt ${attempt + 1}/$maxAttempts)');
+          continue;
+        } else {
+          // Check if this is a key mismatch error (non-recoverable)
+          final errorMessage = bootstrapResult.error ?? '';
+          if (errorMessage.contains('keys mismatch') || 
+              errorMessage.contains('different public key') ||
+              errorMessage.contains('encrypted with a different')) {
+            // Key mismatch - stop polling and show error
+            debugPrint('❌ Key mismatch error - stopping polling: $errorMessage');
+            if (mounted && Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+            if (mounted) {
+              showCustomToast(
+                context, 
+                'Pairing failed: Key mismatch. Please try pairing again.',
+                isError: true,
+              );
+              setState(() {
+                _isProcessing = false;
+                _faceDetected = false;
+              });
+            }
+            return;
+          }
+          
+          // Some other error occurred - might be temporary, continue polling
+          debugPrint('⚠️ Bootstrap error during polling: $errorMessage');
+          // Continue polling in case it's a temporary error
+          // Only stop if it's a critical error that won't resolve
+          continue;
+        }
+      } catch (e) {
+        debugPrint('❌ Polling error: $e');
+        // Continue polling in case it's a temporary network error
+        continue;
+      }
+    }
+
+    // Timeout - pairing not approved within time limit
+    if (mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+      showCustomToast(context, 'Pairing timeout. Please try again.', isError: true);
+      setState(() {
+        _isProcessing = false;
+        _faceDetected = false;
+      });
     }
   }
 

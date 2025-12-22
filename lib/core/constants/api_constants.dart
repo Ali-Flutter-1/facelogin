@@ -13,6 +13,12 @@ class ApiConstants {
   // Link Devices endpoints
   static const String allDevices='$baseUrl/e2e/devices';
 
+  // Device Pairing endpoints (for cross-device E2E setup)
+  static const String pairingRequest = '$baseUrl/e2e/pairing/request';
+  static const String pairingLookupByOtp = '$baseUrl/e2e/pairing/lookup-by-otp';
+  static const String pairingApprove = '$baseUrl/e2e/pairing/approve';
+  static const String pairingLookup = '$baseUrl/e2e/pairing/lookup';
+
   // Request headers
   static const String contentTypeJson = "application/json";
   static const String acceptHeader = "application/json, text/plain, */*";

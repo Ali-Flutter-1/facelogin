@@ -105,42 +105,97 @@ class DeviceApiService {
   /// Link a new device using QR code data
   Future<bool> linkDevice(String qrCodeData) async {
     try {
+      debugPrint('📱 Link Device: Starting with QR code data: $qrCodeData');
+      
       final accessToken = await _storage.read(key: AppConstants.accessTokenKey);
       if (accessToken == null || accessToken.isEmpty) {
-        throw Exception('No access token found');
+        debugPrint('❌ Link Device: No access token found');
+        throw Exception('No access token found. Please login again.');
       }
 
-      // Parse QR code data (assuming it contains deviceId or similar)
-      final requestBody = jsonEncode({
-        'qrCode': qrCodeData,
-        // Add other required fields based on your API
-      });
+      // Try to parse QR code - it might be a URL, JSON, or just a device ID
+      Map<String, dynamic> requestBody;
+      
+      // Check if QR code is a URL
+      if (qrCodeData.startsWith('http://') || qrCodeData.startsWith('https://')) {
+        // Extract device ID from URL if it's a link
+        final uri = Uri.tryParse(qrCodeData);
+        final deviceId = uri?.queryParameters['deviceId'] ?? 
+                        uri?.pathSegments.last ?? 
+                        qrCodeData;
+        requestBody = {'deviceId': deviceId};
+        debugPrint('📱 Link Device: Extracted deviceId from URL: $deviceId');
+      } else {
+        // Try to parse as JSON
+        try {
+          final jsonData = jsonDecode(qrCodeData);
+          if (jsonData is Map) {
+            requestBody = jsonData as Map<String, dynamic>;
+            debugPrint('📱 Link Device: Parsed QR code as JSON');
+          } else {
+            // Treat as plain device ID
+            requestBody = {'deviceId': qrCodeData};
+            debugPrint('📱 Link Device: Treating QR code as deviceId');
+          }
+        } catch (e) {
+          // Not JSON, treat as plain device ID
+          requestBody = {'deviceId': qrCodeData};
+          debugPrint('📱 Link Device: Treating QR code as plain deviceId');
+        }
+      }
+
+      final requestBodyJson = jsonEncode(requestBody);
+      final apiUrl = '${ApiConstants.allDevices}/link';
+      
+      debugPrint('📱 Link Device: POST $apiUrl');
+      debugPrint('📱 Link Device: Request body: $requestBodyJson');
 
       final response = await _client.post(
-        Uri.parse('${ApiConstants.allDevices}/link'),
+        Uri.parse(apiUrl),
         headers: {
           'Authorization': 'Bearer $accessToken',
           'Content-Type': ApiConstants.contentTypeJson,
           'Accept': ApiConstants.acceptHeader,
         },
-        body: requestBody,
-      ).timeout(const Duration(seconds: 30));
+        body: requestBodyJson,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          debugPrint('❌ Link Device: Request timeout after 30 seconds');
+          throw Exception('Request timeout. Please check your internet connection and try again.');
+        },
+      );
 
       debugPrint('📱 Link Device Response Status: ${response.statusCode}');
       debugPrint('📱 Link Device Response Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint('✅ Link Device: Success');
         return true;
       } else {
-        final errorData = jsonDecode(response.body);
-        final errorMessage = errorData['error']?['message'] ?? 
-                           errorData['message'] ?? 
-                           'Failed to link device';
-        throw Exception(errorMessage);
+        // Try to parse error response
+        try {
+          final errorData = jsonDecode(response.body);
+          final errorMessage = errorData['error']?['message'] ?? 
+                             errorData['message'] ?? 
+                             'Failed to link device';
+          debugPrint('❌ Link Device Error: $errorMessage');
+          throw Exception(errorMessage);
+        } catch (e) {
+          if (e is Exception && e.toString().contains('Failed to link device')) {
+            rethrow;
+          }
+          // If parsing fails, return generic error with status code
+          debugPrint('❌ Link Device: Failed with status ${response.statusCode}');
+          throw Exception('Failed to link device. Server returned status ${response.statusCode}');
+        }
       }
     } catch (e) {
       debugPrint('❌ Error linking device: $e');
-      rethrow;
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Unexpected error: ${e.toString()}');
     }
   }
 }

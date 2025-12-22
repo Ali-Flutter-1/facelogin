@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'package:facelogin/core/constants/color_constants.dart';
+import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/customWidgets/custom_button.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/data/models/device_model.dart';
 import 'package:facelogin/data/services/device_service.dart' as device_api;
+import 'package:facelogin/data/services/pairing_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -16,6 +20,8 @@ class LinkDeviceScreen extends StatefulWidget {
 
 class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
   final device_api.DeviceApiService _deviceApiService = device_api.DeviceApiService();
+  final PairingService _pairingService = PairingService();
+  final E2EService _e2eService = E2EService();
   List<DeviceModel> _devices = [];
   bool _isLoading = true;
   bool _isRefreshing = false;
@@ -31,6 +37,134 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
   void dispose() {
     _scannerController?.dispose();
     super.dispose();
+  }
+
+  /// Handle pairing token from QR code scan
+  /// Extracts pairing token, looks up pairing details, and approves pairing
+  Future<void> _handlePairingToken(String qrCodeData) async {
+    if (!mounted) return;
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          color: ColorConstants.gradientEnd4,
+        ),
+      ),
+    );
+
+    try {
+      // Extract pairingToken and deviceIdB from QR code
+      // QR code might be:
+      // 1. URL: https://example.com/pair?pairingToken=xxx&deviceId=yyy
+      // 2. JSON: {"pairingToken": "xxx", "deviceId": "yyy"}
+      // 3. Plain pairingToken (legacy)
+      String pairingToken = qrCodeData.trim();
+      String? deviceIdB;
+      
+      // Check if it's a URL
+      if (qrCodeData.startsWith('http://') || qrCodeData.startsWith('https://')) {
+        final uri = Uri.tryParse(qrCodeData);
+        pairingToken = uri?.queryParameters['pairingToken'] ?? 
+                       uri?.pathSegments.last ?? 
+                       qrCodeData.trim();
+        deviceIdB = uri?.queryParameters['deviceId'];
+        debugPrint('🔗 Extracted from URL - pairingToken: $pairingToken, deviceIdB: $deviceIdB');
+      } else {
+        // Try to parse as JSON
+        try {
+          final jsonData = jsonDecode(qrCodeData);
+          if (jsonData is Map) {
+            pairingToken = jsonData['pairingToken']?.toString() ?? qrCodeData.trim();
+            deviceIdB = jsonData['deviceId']?.toString();
+            debugPrint('🔗 Extracted from JSON - pairingToken: $pairingToken, deviceIdB: $deviceIdB');
+          }
+        } catch (e) {
+          // Not JSON, treat as plain pairingToken (legacy support)
+          pairingToken = qrCodeData.trim();
+          debugPrint('🔗 Treating QR code as plain pairingToken: $pairingToken');
+        }
+      }
+
+      debugPrint('🔗 Processing pairing - pairingToken: $pairingToken, deviceIdB: $deviceIdB');
+
+      // Step 1: Lookup pairing by token to get PKd2 (Device B's public key)
+      final lookupResult = await _pairingService.lookupByPairingToken(pairingToken);
+      
+      // Use deviceIdB from QR code if available, otherwise fallback to lookup result
+      final finalDeviceIdB = deviceIdB ?? lookupResult.deviceId;
+      
+      if (finalDeviceIdB == null) {
+        if (!mounted) return;
+        Navigator.pop(context);
+        showCustomToast(
+          context,
+          'Device ID not found in QR code or lookup response',
+          isError: true,
+        );
+        return;
+      }
+      
+      debugPrint('🔗 Using deviceIdB: $finalDeviceIdB (from QR: ${deviceIdB != null}, from lookup: ${lookupResult.deviceId != null})');
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (!lookupResult.isSuccess) {
+        showCustomToast(
+          context,
+          lookupResult.error ?? 'Failed to lookup pairing',
+          isError: true,
+        );
+        return;
+      }
+
+      // Step 2: Get current session Ku
+      final ku = await _e2eService.getSessionKu();
+      if (ku == null) {
+        showCustomToast(
+          context,
+          'Please login first to approve pairing',
+          isError: true,
+        );
+        return;
+      }
+
+      // Step 3: Encrypt Ku with new device's public key
+      final publicKeyBytes = base64Decode(lookupResult.publicKey!);
+      final wrappedKuBase64 = await _e2eService.encryptKuWithPublicKey(
+        ku,
+        publicKeyBytes,
+      );
+
+      // Step 4: Approve pairing
+      final success = await _pairingService.approvePairing(
+        pairingToken: lookupResult.pairingToken!,
+        wrappedKu: wrappedKuBase64,
+      );
+
+      if (!mounted) return;
+
+      if (success) {
+        showCustomToast(context, 'Device pairing approved successfully!');
+        // Refresh devices list
+        await _fetchDevices();
+      } else {
+        showCustomToast(context, 'Failed to approve pairing', isError: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog if still open
+        showCustomToast(
+          context,
+          'Failed to process pairing: ${e.toString()}',
+          isError: true,
+        );
+      }
+      debugPrint('❌ Error handling pairing token: $e');
+    }
   }
 
   Future<void> _fetchDevices() async {
@@ -78,39 +212,24 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
       builder: (context) => _QRScannerBottomSheet(
         controller: _scannerController!,
         onScan: (String code) async {
+          // Close scanner first
           Navigator.pop(context);
+          
+          // Stop and dispose scanner
+          await _scannerController?.stop();
           _scannerController?.dispose();
           _scannerController = null;
 
-          // Show loading
-          if (mounted) {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => const Center(
-                child: CircularProgressIndicator(
-                  color: ColorConstants.gradientEnd4,
-                ),
-              ),
-            );
-          }
+          debugPrint('📱 QR Code Scanned: $code');
+          debugPrint('📱 QR Code Length: ${code.length}');
 
-          try {
-            await _deviceApiService.linkDevice(code);
-            if (mounted) {
-              Navigator.pop(context); // Close loading dialog
-              showCustomToast(context, 'Device linked successfully!');
-              _fetchDevices();
-            }
-          } catch (e) {
-            if (mounted) {
-              Navigator.pop(context); // Close loading dialog
-              showCustomToast(context, 'Failed to link device: ${e.toString()}', isError: true);
-            }
-          }
+          // Process the QR code as a pairing token
+          await _handlePairingToken(code);
         },
       ),
     ).then((_) {
+      // Cleanup if user closes without scanning
+      _scannerController?.stop();
       _scannerController?.dispose();
       _scannerController = null;
     });
@@ -488,6 +607,18 @@ class _QRScannerBottomSheet extends StatefulWidget {
 
 class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
   bool _isProcessing = false;
+  String? _lastScannedCode;
+  DateTime? _lastScanTime;
+  String? _pendingCode;
+  DateTime? _pendingCodeTime;
+  bool _isConfirming = false;
+
+  @override
+  void dispose() {
+    // Stop scanner when disposing
+    widget.controller.stop();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -530,7 +661,10 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                     Icons.close,
                     color: ColorConstants.primaryTextColor,
                   ),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    widget.controller.stop();
+                    Navigator.pop(context);
+                  },
                 ),
               ],
             ),
@@ -542,19 +676,79 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
               children: [
                 MobileScanner(
                   controller: widget.controller,
-                  onDetect: (capture) {
+                  onDetect: (capture) async {
+                    // Prevent processing if already processing
                     if (_isProcessing) return;
 
                     final List<Barcode> barcodes = capture.barcodes;
-                    if (barcodes.isNotEmpty) {
-                      final String code = barcodes.first.rawValue ?? '';
-                      if (code.isNotEmpty) {
+                    if (barcodes.isEmpty) {
+                      // Clear pending code if no barcode detected
+                      _pendingCode = null;
+                      _pendingCodeTime = null;
+                      return;
+                    }
+
+                    final String? code = barcodes.first.rawValue;
+                    if (code == null || code.isEmpty) {
+                      _pendingCode = null;
+                      _pendingCodeTime = null;
+                      return;
+                    }
+
+                    final now = DateTime.now();
+
+                    // If we have a pending code, check if it's the same
+                    if (_pendingCode != null && _pendingCodeTime != null) {
+                      // If same code detected again, check if 1 second has passed
+                      if (_pendingCode == code) {
+                        final timeDiff = now.difference(_pendingCodeTime!);
+                        if (timeDiff.inSeconds >= 1) {
+                          // 1 second has passed with same code - process it
+                          setState(() {
+                            _isProcessing = true;
+                            _isConfirming = false;
+                            _lastScannedCode = code;
+                            _lastScanTime = now;
+                          });
+
+                          // Stop the scanner to prevent further detections
+                          await widget.controller.stop();
+
+                          debugPrint('📱 QR Code Scanned (after 1s delay): $code');
+
+                          // Small delay to show processing state
+                          await Future.delayed(const Duration(milliseconds: 300));
+
+                          // Call the callback
+                          widget.onScan(code);
+                          return;
+                        }
+                        // Same code but less than 1 second - keep waiting
+                        // Show confirming state
+                        if (!_isConfirming) {
+                          setState(() {
+                            _isConfirming = true;
+                          });
+                        }
+                        return;
+                      } else {
+                        // Different code detected - reset pending
                         setState(() {
-                          _isProcessing = true;
+                          _pendingCode = code;
+                          _pendingCodeTime = now;
+                          _isConfirming = false;
                         });
-                        widget.onScan(code);
+                        return;
                       }
                     }
+
+                    // First time detecting this code - set as pending
+                    setState(() {
+                      _pendingCode = code;
+                      _pendingCodeTime = now;
+                      _isConfirming = true;
+                    });
+                    debugPrint('📱 QR Code detected, waiting 1 second to confirm: $code');
                   },
                 ),
 
@@ -572,29 +766,82 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                   margin: const EdgeInsets.all(40),
                 ),
 
-                // Instructions
-                Positioned(
-                  bottom: 40,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 40),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Text(
-                      'Position the QR code within the frame',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'OpenSans',
-                        fontSize: 16,
-                        color: ColorConstants.primaryTextColor,
+                // Loading overlay when confirming/processing
+                if (_isConfirming || _isProcessing)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.5),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: ColorConstants.gradientEnd4,
+                              strokeWidth: 4,
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              _isProcessing 
+                                  ? 'Processing...'
+                                  : 'Confirming QR code...',
+                              style: const TextStyle(
+                                fontFamily: 'OpenSans',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: ColorConstants.primaryTextColor,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            if (_pendingCode != null && !_isProcessing)
+                              Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 40),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  _pendingCode!.length > 40 
+                                      ? '${_pendingCode!.substring(0, 40)}...'
+                                      : _pendingCode!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: 'OpenSans',
+                                    fontSize: 12,
+                                    color: ColorConstants.primaryTextColor.withOpacity(0.8),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
+
+                // Instructions (only show when not confirming/processing)
+                if (!_isConfirming && !_isProcessing)
+                  Positioned(
+                    bottom: 40,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 40),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Text(
+                        'Position the QR code within the frame',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'OpenSans',
+                          fontSize: 16,
+                          color: ColorConstants.primaryTextColor,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

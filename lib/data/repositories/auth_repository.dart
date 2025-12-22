@@ -66,12 +66,21 @@ class AuthRepository {
           e2eResult = await _e2eService.bootstrapForRegistration(accessToken!);
         }
 
+        // Check if pairing is required (E2E set up on another device)
+        if (e2eResult.needsPairing) {
+          print('🔗 E2E Pairing Required');
+          debugPrint('🔗 [AUTH] E2E encryption is set up on another device');
+          // Return special result indicating pairing is needed
+          return AuthResult.pairingRequired(e2eResult.error ?? 'Device pairing required');
+        }
+
         if (!e2eResult.isSuccess) {
           print('🔐 E2E Setup: Failed - ${e2eResult.error}');
-          debugPrint('⚠️ [AUTH] E2E setup failed: ${e2eResult.error}');
-          debugPrint('⚠️ [AUTH] Continuing login anyway (E2E failure non-blocking)');
-          // Continue anyway - E2E failure shouldn't block login
-          // Common reasons: server error, network issues
+          debugPrint('❌ [AUTH] E2E setup failed: ${e2eResult.error}');
+          // E2E encryption is required - return error to prevent login
+          return AuthResult.error(
+            'E2E encryption setup failed. ${e2eResult.error ?? "Please try again."}'
+          );
         } else {
           print('🔐 E2E Setup: Success ✓');
           debugPrint('✅ [AUTH] E2E encryption successfully initialized');
@@ -128,11 +137,22 @@ class AuthRepository {
 class AuthResult {
   final LoginResponseModel? data;
   final String? error;
+  final bool requiresPairing;
 
-  AuthResult.success(this.data) : error = null;
-  AuthResult.error(this.error) : data = null;
+  AuthResult.success(this.data) 
+      : error = null, 
+        requiresPairing = false;
+  
+  AuthResult.error(this.error) 
+      : data = null, 
+        requiresPairing = false;
+  
+  AuthResult.pairingRequired(this.error)
+      : data = null,
+        requiresPairing = true;
 
   bool get isSuccess => data != null;
   bool get isError => error != null;
+  bool get needsPairing => requiresPairing;
 }
 

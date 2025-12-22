@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:facelogin/components/kyc.dart';
 import 'package:facelogin/screens/kyc/kyc_screen.dart';
 import 'package:facelogin/screens/linkDevice/link_device_screen.dart';
+import 'package:facelogin/screens/pairing/otp_approval_screen.dart';
 import 'package:facelogin/screens/profile/profile_update_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -234,15 +235,32 @@ class _ProfileScreenState extends State<ProfileScreen>
             _joinedDate = '';
           }
         });
-      } else if (response.statusCode == 401) {
-        debugPrint("ProfileScreen: Access token invalid or expired");
-        showCustomToast(context, "Session expired. Please log in again.", isError: true);
-        await storage.deleteAll();
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
-              (route) => false,
-        );
+      } else if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
+        debugPrint("ProfileScreen: Access token invalid, expired, or user deleted - Status: ${response.statusCode}");
+        
+        // Check if user is deleted (404) or unauthorized (401/403)
+        String errorMessage = "Session expired. Please log in again.";
+        if (response.statusCode == 404) {
+          errorMessage = "Your account has been deleted or is no longer available. Please contact support.";
+        } else if (response.statusCode == 403) {
+          errorMessage = "Access denied. Your account may have been deleted. Please contact support.";
+        }
+        
+        showCustomToast(context, errorMessage, isError: true);
+        
+        // Clear all tokens and E2E session keys (preserve device keys for re-registration)
+        await storage.delete(key: 'access_token');
+        await storage.delete(key: 'refresh_token');
+        await storage.delete(key: 'e2e_ku_session');
+        
+        // Navigate to login screen
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
+                (route) => false,
+          );
+        }
       } else {
         debugPrint("ProfileScreen: Failed to load profile: ${response.statusCode} - ${response.body}");
         showCustomToast(context, "Failed to load profile. Please try again.", isError: true);
@@ -593,6 +611,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 const LinkDeviceScreen()),
                           );
 
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      PremiumButton(
+                        backgroundColor: Colors.green,
+                        textColor: Colors.white,
+                        text: 'Approve Device',
+                        icon: Icons.security,
+                        height: 60,
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                const OtpApprovalScreen()),
+                          );
                         },
                       ),
                       const SizedBox(height: 16),

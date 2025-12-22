@@ -123,19 +123,32 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
           _idVerified = user['id_verified'] ?? false; // Get ID verification status
           _isLoading = false;
         });
-      } else if (response.statusCode == 401) {
-        debugPrint("ProfileScreen: Access token invalid or expired");
-        showCustomToast(context, "Session expired. Please log in again.", isError: true);
+      } else if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
+        debugPrint("ProfileUpdateScreen: Access token invalid, expired, or user deleted - Status: ${response.statusCode}");
+        
+        // Check if user is deleted (404) or unauthorized (401/403)
+        String errorMessage = "Session expired. Please log in again.";
+        if (response.statusCode == 404) {
+          errorMessage = "Your account has been deleted or is no longer available. Please contact support.";
+        } else if (response.statusCode == 403) {
+          errorMessage = "Access denied. Your account may have been deleted. Please contact support.";
+        }
+        
+        showCustomToast(context, errorMessage, isError: true);
+        
         // Clear only auth tokens, preserve E2E keys (SKd) and device ID
         await storage.delete(key: 'access_token');
         await storage.delete(key: 'refresh_token');
         await storage.delete(key: 'e2e_ku_session'); // Clear session key only
         // DO NOT delete: e2e_skd, device_id
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
-              (route) => false,
-        );
+        
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
+                (route) => false,
+          );
+        }
       } else {
         debugPrint("ProfileScreen: Failed to load profile: ${response.statusCode} - ${response.body}");
         showCustomToast(context, "Failed to load profile. Please try again.", isError: true);
@@ -162,18 +175,43 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
       return;
     }
 
-    // Only include first_name, last_name, and dob if id_verified is false
-    // If id_verified is true, these fields are read-only and shouldn't be updated
-    final Map<String, dynamic> bodyData = {
-      "phone": _phoneController.text.trim(),
-      "email": _emailController.text.trim(),
-    };
+    // Build request body with only non-empty fields (allow partial updates)
+    final Map<String, dynamic> bodyData = {};
     
-    // Only add first_name, last_name, and dob if user is not verified
+    // Only include fields that have values
+    final phone = _phoneController.text.trim();
+    if (phone.isNotEmpty) {
+      bodyData["phone"] = phone;
+    }
+    
+    final email = _emailController.text.trim();
+    if (email.isNotEmpty) {
+      bodyData["email"] = email;
+    }
+    
+    // Only add first_name, last_name, and dob if user is not verified and fields have values
     if (!_idVerified) {
-      bodyData["first_name"] = _firstNameController.text.trim();
-      bodyData["last_name"] = _lastNameController.text.trim();
-      bodyData["dob"] = _dobController.text.trim();
+      final firstName = _firstNameController.text.trim();
+      if (firstName.isNotEmpty) {
+        bodyData["first_name"] = firstName;
+      }
+      
+      final lastName = _lastNameController.text.trim();
+      if (lastName.isNotEmpty) {
+        bodyData["last_name"] = lastName;
+      }
+      
+      final dob = _dobController.text.trim();
+      if (dob.isNotEmpty) {
+        bodyData["dob"] = dob;
+      }
+    }
+    
+    // Check if at least one field is being updated
+    if (bodyData.isEmpty) {
+      showCustomToast(context, "Please fill at least one field to update.", isError: true);
+      setState(() => _isSaving = false);
+      return;
     }
     
     final body = jsonEncode(bodyData);
@@ -292,24 +330,37 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
                             controller: _firstNameController,
                             icon: Icons.person_outline,
                             readOnly: _idVerified, // Read-only if id_verified is true
+                            validator: (value) => null, // Allow empty for partial updates
                           ),
                           CustomInnerInputField(
                             label: 'Last Name',
                             controller: _lastNameController,
                             icon: Icons.person_outline,
                             readOnly: _idVerified, // Read-only if id_verified is true
+                            validator: (value) => null, // Allow empty for partial updates
                           ),
                           CustomInnerInputField(
                             label: 'Email',
                             controller: _emailController,
                             icon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
+                            validator: (value) {
+                              // Only validate email format if provided, allow empty
+                              if (value != null && value.isNotEmpty) {
+                                final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                                if (!emailRegex.hasMatch(value)) {
+                                  return 'Please enter a valid email';
+                                }
+                              }
+                              return null;
+                            },
                           ),
                           CustomInnerInputField(
                             label: 'Phone',
                             controller: _phoneController,
                             icon: Icons.phone_android_outlined,
                             keyboardType: TextInputType.phone,
+                            validator: (value) => null, // Allow empty for partial updates
                           ),
                           CustomInnerInputField(
                             label: 'Date of Birth',
@@ -318,6 +369,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
                             onTap: _idVerified ? null : () => _selectDate(context), // Disable date picker if verified
                             icon: Icons.calendar_today_outlined,
                             hintText: 'Select your birth date',
+                            validator: (value) => null, // Allow empty for partial updates
                           ),
                         ],
                       ),
