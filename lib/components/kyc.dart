@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class KycController extends GetxController {
   var frontImage = Rx<XFile?>(null);
@@ -23,7 +24,6 @@ class KycController extends GetxController {
 
 
   final ImagePicker picker = ImagePicker();
-  final FlutterSecureStorage storage = const FlutterSecureStorage();
 
 
 
@@ -31,7 +31,8 @@ class KycController extends GetxController {
   // Upload image to get ID/path
   Future<String?> uploadImageToServer(XFile imageFile, String fieldName, BuildContext context) async {
     try {
-      final token = await storage.read(key: 'access_token');
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('access_token');
       if (token == null) {
         showCustomToast(context, "No access token found.", isError: true);
         return null;
@@ -401,7 +402,8 @@ class KycController extends GetxController {
 
   Future<String?> getAccessToken() async {
     try {
-      String? token = await storage.read(key: 'access_token');
+      final prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('access_token');
       if (token == null || token.isEmpty) {
         showCustomToast(Get.context!, "No access token found. Please log in again.");
         return null;
@@ -415,8 +417,8 @@ class KycController extends GetxController {
   Future<void> submitKyc({
     required BuildContext context,
   }) async {
-    const storage = FlutterSecureStorage();
-    final token = await storage.read(key: 'access_token');
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
 
     if (token == null) {
       showCustomToast(context, "No access token found.", isError: true);

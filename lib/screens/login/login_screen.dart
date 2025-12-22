@@ -565,9 +565,23 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         if (responseData != null &&
             responseData["access_token"] != null &&
             responseData["refresh_token"] != null) {
-          // Use AuthRepository to handle E2E bootstrap
+          // Use AuthRepository to handle token storage and E2E bootstrap
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
+          
+          // Check if auth failed
+          if (authResult.isError) {
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+              _statusMessage = '';
+              _subStatusMessage = '';
+              _faceGuidanceMessage = '';
+            });
+            showCustomToast(context, authResult.error ?? "Failed to save session. Please try again.", isError: true);
+            _handleRetry();
+            return;
+          }
           
           // Check if pairing is required
           if (authResult.needsPairing) {
@@ -576,7 +590,22 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             return;
           }
           
-          // Continue even if E2E failed (non-blocking)
+          // Verify tokens were saved before navigating
+          final savedToken = await authRepo.getAccessToken();
+          if (savedToken == null) {
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+              _statusMessage = '';
+              _subStatusMessage = '';
+              _faceGuidanceMessage = '';
+            });
+            showCustomToast(context, "Failed to save session. Please try again.", isError: true);
+            _handleRetry();
+            return;
+          }
+          
+          // Success - navigate to profile
           showCustomToast(context, "Face login successful!");
           await Future.delayed(const Duration(milliseconds: 500));
 
@@ -709,9 +738,23 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         if (responseData != null &&
             responseData["access_token"] != null &&
             responseData["refresh_token"] != null) {
-          // Use AuthRepository to handle E2E bootstrap
+          // Use AuthRepository to handle token storage and E2E bootstrap
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
+          
+          // Check if auth failed
+          if (authResult.isError) {
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+              _statusMessage = '';
+              _subStatusMessage = '';
+              _faceGuidanceMessage = '';
+            });
+            showCustomToast(context, authResult.error ?? "Failed to save session. Please try again.", isError: true);
+            _handleRetry();
+            return;
+          }
           
           // Check if pairing is required
           if (authResult.needsPairing) {
@@ -720,7 +763,22 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             return;
           }
           
-          // Continue even if E2E failed (non-blocking)
+          // Verify tokens were saved before navigating
+          final savedToken = await authRepo.getAccessToken();
+          if (savedToken == null) {
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+              _statusMessage = '';
+              _subStatusMessage = '';
+              _faceGuidanceMessage = '';
+            });
+            showCustomToast(context, "Failed to save session. Please try again.", isError: true);
+            _handleRetry();
+            return;
+          }
+          
+          // Success - navigate to profile
           showCustomToast(context, "Face login successful!");
           await Future.delayed(const Duration(milliseconds: 500));
 

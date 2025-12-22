@@ -203,8 +203,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _fetchProfile() async {
-    const storage = FlutterSecureStorage();
-    final token = await storage.read(key: 'access_token');
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
 
     if (token == null) {
       debugPrint("ProfileScreen: No access token found");
@@ -286,9 +286,11 @@ class _ProfileScreenState extends State<ProfileScreen>
         showCustomToast(context, errorMessage, isError: true);
 
         // Clear all tokens and E2E session keys (preserve device keys for re-registration)
-        await storage.delete(key: 'access_token');
-        await storage.delete(key: 'refresh_token');
-        await storage.delete(key: 'e2e_ku_session');
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('access_token');
+        await prefs.remove('refresh_token');
+        const secureStorage = FlutterSecureStorage();
+        await secureStorage.delete(key: 'e2e_ku_session');
 
         // Navigate to login screen
         if (mounted) {
@@ -716,11 +718,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     try {
       // 1. Clear only auth tokens and session keys (NOT E2E keys)
       // E2E keys (SKd) must remain on device for future logins
+      final prefs = await SharedPreferences.getInstance();
       const secureStorage = FlutterSecureStorage();
 
       // Only delete auth tokens, preserve E2E keys
-      await secureStorage.delete(key: 'access_token');
-      await secureStorage.delete(key: 'refresh_token');
+      await prefs.remove('access_token');
+      await prefs.remove('refresh_token');
       await secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
 
       // DO NOT delete:
@@ -728,7 +731,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       // - device_id (Device ID - must stay on device)
 
       // 2. Clear SharedPreferences (non-sensitive app data)
-      final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
 
       // 3. Show logout confirmation

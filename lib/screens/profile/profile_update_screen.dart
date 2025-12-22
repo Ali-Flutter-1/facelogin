@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../constant/constant.dart';
@@ -84,8 +85,8 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
 
 
   Future<void> _fetchExistingProfile() async {
-    const storage = FlutterSecureStorage();
-    final token = await storage.read(key: 'access_token');
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
 
     if (token == null) {
       showCustomToast(context, "No access token found.", isError: true);
@@ -127,9 +128,10 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
         debugPrint("ProfileScreen: Access token invalid or expired");
         showCustomToast(context, "Session expired. Please log in again.", isError: true);
         // Clear only auth tokens, preserve E2E keys (SKd) and device ID
-        await storage.delete(key: 'access_token');
-        await storage.delete(key: 'refresh_token');
-        await storage.delete(key: 'e2e_ku_session'); // Clear session key only
+        await prefs.remove('access_token');
+        await prefs.remove('refresh_token');
+        const secureStorage = FlutterSecureStorage();
+        await secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
         // DO NOT delete: e2e_skd, device_id
         Navigator.pushAndRemoveUntil(
           context,
@@ -153,8 +155,8 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
 
     setState(() => _isSaving = true);
 
-    final storage = const FlutterSecureStorage();
-    final token = await storage.read(key: 'access_token');
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
 
     if (token == null) {
       showCustomToast(context, "No access token found.", isError: true);

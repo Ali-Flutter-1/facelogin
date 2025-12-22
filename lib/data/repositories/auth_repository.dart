@@ -4,19 +4,16 @@ import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/data/models/login_response_model.dart';
 import 'package:facelogin/data/services/auth_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthRepository {
   final AuthService _authService;
-  final FlutterSecureStorage _storage;
   final E2EService _e2eService;
 
   AuthRepository({
     AuthService? authService,
-    FlutterSecureStorage? storage,
     E2EService? e2eService,
   })  : _authService = authService ?? AuthService(),
-        _storage = storage ?? const FlutterSecureStorage(),
         _e2eService = e2eService ?? E2EService();
 
   /// Login or register with face image
@@ -28,25 +25,43 @@ class AuthRepository {
       try {
         final accessToken = result.data!.accessToken;
         
-        // Save tokens to secure storage
-        await _storage.write(
-          key: AppConstants.accessTokenKey,
-          value: accessToken,
+        // Save tokens to SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        debugPrint('💾 Saving tokens to SharedPreferences...');
+        
+        final accessTokenSaved = await prefs.setString(
+          AppConstants.accessTokenKey,
+          accessToken!,
         );
-        await _storage.write(
-          key: AppConstants.refreshTokenKey,
-          value: result.data!.refreshToken,
+        final refreshTokenSaved = await prefs.setString(
+          AppConstants.refreshTokenKey,
+          result.data!.refreshToken!,
         );
 
-        // Verify tokens were saved
-        final savedAccessToken = await _storage.read(key: AppConstants.accessTokenKey);
-        final savedRefreshToken = await _storage.read(key: AppConstants.refreshTokenKey);
+        debugPrint('💾 Token save results: accessToken=$accessTokenSaved, refreshToken=$refreshTokenSaved');
 
-        if (savedAccessToken == null || savedRefreshToken == null) {
+        if (!accessTokenSaved || !refreshTokenSaved) {
+          debugPrint('❌ Failed to save tokens to SharedPreferences');
           return AuthResult.error(
             'Login successful but failed to save session. Please try again.',
           );
         }
+
+        // Verify tokens were saved
+        final savedAccessToken = prefs.getString(AppConstants.accessTokenKey);
+        final savedRefreshToken = prefs.getString(AppConstants.refreshTokenKey);
+
+        debugPrint('💾 Token verification: accessToken=${savedAccessToken != null && savedAccessToken.isNotEmpty}, refreshToken=${savedRefreshToken != null && savedRefreshToken.isNotEmpty}');
+
+        if (savedAccessToken == null || savedAccessToken.isEmpty || 
+            savedRefreshToken == null || savedRefreshToken.isEmpty) {
+          debugPrint('❌ Token verification failed');
+          return AuthResult.error(
+            'Login successful but failed to save session. Please try again.',
+          );
+        }
+        
+        debugPrint('✅ Tokens saved and verified successfully');
 
         // E2E Encryption Bootstrap
         // Check if this is a new user (registration) or existing user (login)
@@ -101,12 +116,14 @@ class AuthRepository {
 
   /// Get access token from storage
   Future<String?> getAccessToken() async {
-    return await _storage.read(key: AppConstants.accessTokenKey);
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(AppConstants.accessTokenKey);
   }
 
   /// Get refresh token from storage
   Future<String?> getRefreshToken() async {
-    return await _storage.read(key: AppConstants.refreshTokenKey);
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(AppConstants.refreshTokenKey);
   }
 
   /// Clear all stored tokens and E2E session keys
@@ -114,8 +131,9 @@ class AuthRepository {
   /// Only clears: access token, refresh token, and session Ku
   /// SKd remains on device for future logins
   Future<void> clearTokens() async {
-    await _storage.delete(key: AppConstants.accessTokenKey);
-    await _storage.delete(key: AppConstants.refreshTokenKey);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(AppConstants.accessTokenKey);
+    await prefs.remove(AppConstants.refreshTokenKey);
     // Clear E2E session key (Ku) only - SKd stays on device
     await _e2eService.clearSessionKeys();
     debugPrint('🔐 Cleared auth tokens and session key, kept device key (SKd)');
@@ -125,8 +143,9 @@ class AuthRepository {
   /// WARNING: This permanently deletes SKd - device will need re-registration
   /// Should NOT be called during normal logout
   Future<void> clearAllData() async {
-    await _storage.delete(key: AppConstants.accessTokenKey);
-    await _storage.delete(key: AppConstants.refreshTokenKey);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(AppConstants.accessTokenKey);
+    await prefs.remove(AppConstants.refreshTokenKey);
     await _e2eService.clearAllKeys();
     debugPrint('⚠️ Cleared all data including E2E keys - device needs re-registration');
   }

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:facelogin/screens/login/login_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../profile/profile_screen.dart';
 
@@ -14,7 +15,7 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  final _storage = const FlutterSecureStorage();
+  final _secureStorage = const FlutterSecureStorage(); // For E2E keys only
 
   @override
   void initState() {
@@ -23,7 +24,8 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkTokenAndNavigate() async {
-    final accessToken = await _storage.read(key: "access_token");
+    final prefs = await SharedPreferences.getInstance();
+    final accessToken = prefs.getString("access_token");
 
     await Future.delayed(const Duration(seconds: 4)); // smooth transition
 
@@ -39,9 +41,9 @@ class _SplashScreenState extends State<SplashScreen> {
         return;
       } else {
         // Token expired - clear only auth tokens, preserve E2E keys (SKd) and device ID
-        await _storage.delete(key: 'access_token');
-        await _storage.delete(key: 'refresh_token');
-        await _storage.delete(key: 'e2e_ku_session'); // Clear session key only
+        await prefs.remove('access_token');
+        await prefs.remove('refresh_token');
+        await _secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
         // DO NOT delete: e2e_skd, device_id
       }
     }
