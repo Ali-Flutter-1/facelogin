@@ -76,11 +76,10 @@ class AuthRepository {
 
         if (!e2eResult.isSuccess) {
           print('🔐 E2E Setup: Failed - ${e2eResult.error}');
-          debugPrint('❌ [AUTH] E2E setup failed: ${e2eResult.error}');
-          // E2E encryption is required - return error to prevent login
-          return AuthResult.error(
-            'E2E encryption setup failed. ${e2eResult.error ?? "Please try again."}'
-          );
+          debugPrint('⚠️ [AUTH] E2E setup failed: ${e2eResult.error}');
+          debugPrint('⚠️ [AUTH] Continuing login anyway (E2E failure non-blocking)');
+          // Continue anyway - E2E failure shouldn't block login
+          // Common reasons: server error, network issues
         } else {
           print('🔐 E2E Setup: Success ✓');
           debugPrint('✅ [AUTH] E2E encryption successfully initialized');

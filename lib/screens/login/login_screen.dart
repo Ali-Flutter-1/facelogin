@@ -576,24 +576,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             return;
           }
           
-          // Check if E2E encryption setup failed
-          if (authResult.isError) {
-            setState(() {
-              _isProcessing = false;
-              _statusMessage = '';
-              _subStatusMessage = '';
-              _faceGuidanceMessage = '';
-            });
-            showCustomToast(context, authResult.error ?? "E2E encryption setup failed. Please try again.", isError: true);
-            setState(() {
-              _faceDetected = false;
-              _faceGuidanceMessage = '';
-            });
-            _handleRetry();
-            return;
-          }
-          
-          // E2E encryption successful - proceed to dashboard
+          // Continue even if E2E failed (non-blocking)
           showCustomToast(context, "Face login successful!");
           await Future.delayed(const Duration(milliseconds: 500));
 
@@ -626,8 +609,6 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         });
 
         String errorCode = "Face recognition failed. Please try again.";
-        bool isUserDeleted = false;
-        
         try {
           final errorData = jsonDecode(response.body);
           if (errorData is Map && errorData.containsKey('error')) {
@@ -637,29 +618,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               errorCode = errorData['error'].toString();
             }
           }
-          
-          // Check if user is deleted (401, 403, 404)
-          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
-            isUserDeleted = true;
-            errorCode = "Your account has been deleted or is no longer available. Please contact support.";
-            
-            // Clear all tokens and redirect to login
-            await _storage.delete(key: 'access_token');
-            await _storage.delete(key: 'refresh_token');
-            await _storage.delete(key: 'e2e_ku_session');
-          }
-        } catch (_) {
-          // If parsing fails but status code indicates deleted user
-          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
-            isUserDeleted = true;
-            errorCode = "Your account has been deleted or is no longer available. Please contact support.";
-            
-            // Clear all tokens
-            await _storage.delete(key: 'access_token');
-            await _storage.delete(key: 'refresh_token');
-            await _storage.delete(key: 'e2e_ku_session');
-          }
-        }
+        } catch (_) {}
 
         showCustomToast(context, errorCode, isError: true);
 
@@ -667,8 +626,6 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           _faceDetected = false;
           _faceGuidanceMessage = '';
         });
-        
-        // If user is deleted, we've already cleared tokens, just retry (which will show login screen)
         _handleRetry();
       }
     } catch (e) {
@@ -763,24 +720,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             return;
           }
           
-          // Check if E2E encryption setup failed
-          if (authResult.isError) {
-            setState(() {
-              _isProcessing = false;
-              _statusMessage = '';
-              _subStatusMessage = '';
-              _faceGuidanceMessage = '';
-            });
-            showCustomToast(context, authResult.error ?? "E2E encryption setup failed. Please try again.", isError: true);
-            setState(() {
-              _faceDetected = false;
-              _faceGuidanceMessage = '';
-            });
-            _handleRetry();
-            return;
-          }
-          
-          // E2E encryption successful - proceed to dashboard
+          // Continue even if E2E failed (non-blocking)
           showCustomToast(context, "Face login successful!");
           await Future.delayed(const Duration(milliseconds: 500));
 
@@ -813,8 +753,6 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         });
 
         String errorCode = "Face recognition failed. Please try again.";
-        bool isUserDeleted = false;
-        
         try {
           final errorData = jsonDecode(response.body);
           if (errorData is Map && errorData.containsKey('error')) {
@@ -824,29 +762,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               errorCode = errorData['error'].toString();
             }
           }
-          
-          // Check if user is deleted (401, 403, 404)
-          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
-            isUserDeleted = true;
-            errorCode = "Your account has been deleted or is no longer available. Please contact support.";
-            
-            // Clear all tokens and redirect to login
-            await _storage.delete(key: 'access_token');
-            await _storage.delete(key: 'refresh_token');
-            await _storage.delete(key: 'e2e_ku_session');
-          }
-        } catch (_) {
-          // If parsing fails but status code indicates deleted user
-          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
-            isUserDeleted = true;
-            errorCode = "Your account has been deleted or is no longer available. Please contact support.";
-            
-            // Clear all tokens
-            await _storage.delete(key: 'access_token');
-            await _storage.delete(key: 'refresh_token');
-            await _storage.delete(key: 'e2e_ku_session');
-          }
-        }
+        } catch (_) {}
 
         showCustomToast(context, errorCode, isError: true);
 
@@ -854,8 +770,6 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           _faceDetected = false;
           _faceGuidanceMessage = '';
         });
-        
-        // If user is deleted, we've already cleared tokens, just retry (which will show login screen)
         _handleRetry();
       }
     } catch (e) {
