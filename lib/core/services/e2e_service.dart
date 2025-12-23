@@ -354,6 +354,8 @@ class E2EService {
         // Check if E2E is set up on another device (requires pairing)
         if (errorCode == 'E2E_SETUP_ON_OTHER_DEVICE' || 
             errorMessage.contains('E2E encryption is set up on another device') ||
+            errorMessage.contains('E2E encryption exists for this user on another device') ||
+            errorMessage.contains('This device needs to be paired') ||
             errorMessage.contains('device pairing required') ||
             errorMessage.contains('pairing')) {
           print('🔐 E2E Status: E2E set up on another device - pairing required');

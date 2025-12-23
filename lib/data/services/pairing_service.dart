@@ -2,14 +2,13 @@ import 'dart:convert';
 import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/constants/app_constants.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
 /// Service for device pairing (cross-device E2E setup)
 /// Handles OTP-based pairing between devices
 class PairingService {
   final http.Client _client = http.Client();
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   /// Request pairing for a new device (Device B - e.g., Oppo)
   /// Returns OTP that needs to be entered on existing device (Device A - e.g., Vivo)
@@ -18,7 +17,8 @@ class PairingService {
     required String publicKey, // PKd2 (base64 encoded)
   }) async {
     try {
-      final accessToken = await _storage.read(key: AppConstants.accessTokenKey);
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString(AppConstants.accessTokenKey);
       if (accessToken == null || accessToken.isEmpty) {
         throw Exception('No access token found');
       }
@@ -59,9 +59,9 @@ class PairingService {
         }
       } else {
         final errorData = jsonDecode(response.body);
-        final errorMessage = errorData['error']?['message'] ?? 
-                           errorData['message'] ?? 
-                           'Failed to request pairing';
+        final errorMessage = errorData['error']?['message'] ??
+            errorData['message'] ??
+            'Failed to request pairing';
         return PairingRequestResult.error(errorMessage);
       }
     } catch (e) {
@@ -75,13 +75,14 @@ class PairingService {
   /// Returns pairing details (deviceId, publicKey) that can be used to approve
   Future<PairingLookupResult> lookupByPairingToken(String pairingToken) async {
     try {
-      final accessToken = await _storage.read(key: AppConstants.accessTokenKey);
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString(AppConstants.accessTokenKey);
       if (accessToken == null || accessToken.isEmpty) {
         throw Exception('No access token found');
       }
 
       final url = Uri.parse('${ApiConstants.pairingLookup}?pairingToken=$pairingToken');
-      
+
       debugPrint('🔗 Pairing Lookup by Token: GET $url');
 
       final response = await _client.get(
@@ -118,9 +119,9 @@ class PairingService {
         }
       } else {
         final errorData = jsonDecode(response.body);
-        final errorMessage = errorData['error']?['message'] ?? 
-                           errorData['message'] ?? 
-                           'Invalid pairing token or pairing request not found';
+        final errorMessage = errorData['error']?['message'] ??
+            errorData['message'] ??
+            'Invalid pairing token or pairing request not found';
         return PairingLookupResult.error(errorMessage);
       }
     } catch (e) {
@@ -133,7 +134,8 @@ class PairingService {
   /// Returns pairingToken that can be used to approve
   Future<PairingLookupResult> lookupByOtp(String otp) async {
     try {
-      final accessToken = await _storage.read(key: AppConstants.accessTokenKey);
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString(AppConstants.accessTokenKey);
       if (accessToken == null || accessToken.isEmpty) {
         throw Exception('No access token found');
       }
@@ -175,9 +177,9 @@ class PairingService {
         }
       } else {
         final errorData = jsonDecode(response.body);
-        final errorMessage = errorData['error']?['message'] ?? 
-                           errorData['message'] ?? 
-                           'Invalid OTP or pairing request not found';
+        final errorMessage = errorData['error']?['message'] ??
+            errorData['message'] ??
+            'Invalid OTP or pairing request not found';
         return PairingLookupResult.error(errorMessage);
       }
     } catch (e) {
@@ -193,7 +195,8 @@ class PairingService {
     required String wrappedKu, // Base64 encoded wrappedKu for Device B
   }) async {
     try {
-      final accessToken = await _storage.read(key: AppConstants.accessTokenKey);
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString(AppConstants.accessTokenKey);
       if (accessToken == null || accessToken.isEmpty) {
         throw Exception('No access token found');
       }
@@ -223,9 +226,9 @@ class PairingService {
         return true;
       } else {
         final errorData = jsonDecode(response.body);
-        final errorMessage = errorData['error']?['message'] ?? 
-                           errorData['message'] ?? 
-                           'Failed to approve pairing';
+        final errorMessage = errorData['error']?['message'] ??
+            errorData['message'] ??
+            'Failed to approve pairing';
         throw Exception(errorMessage);
       }
     } catch (e) {
@@ -237,13 +240,14 @@ class PairingService {
   /// Check pairing status (polling from Device B)
   Future<PairingStatusResult> checkPairingStatus(String pairingToken) async {
     try {
-      final accessToken = await _storage.read(key: AppConstants.accessTokenKey);
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString(AppConstants.accessTokenKey);
       if (accessToken == null || accessToken.isEmpty) {
         throw Exception('No access token found');
       }
 
       final url = Uri.parse('${ApiConstants.pairingLookup}?pairingToken=$pairingToken');
-      
+
       debugPrint('🔗 Pairing Status Check: GET $url');
 
       final response = await _client.get(

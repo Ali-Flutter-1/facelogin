@@ -948,7 +948,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         return;
       }
 
-      // Show pairing dialog with OTP
+      // Show pairing dialog with QR code and OTP
       if (!mounted) return;
       
       showDialog(
@@ -956,6 +956,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         barrierDismissible: false,
         builder: (dialogContext) => DevicePairingDialog(
           otp: pairingResult.otp!,
+          pairingToken: pairingResult.pairingToken,
           onCancel: () {
             Navigator.pop(dialogContext);
             setState(() {

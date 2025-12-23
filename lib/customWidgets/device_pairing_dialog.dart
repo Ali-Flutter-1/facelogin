@@ -1,19 +1,23 @@
+import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/constants/color_constants.dart';
 import 'package:facelogin/customWidgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 /// Dialog shown on new device (Device B - e.g., Oppo) 
-/// Displays OTP that needs to be entered on existing device (Device A - e.g., Vivo)
+/// Displays QR code and OTP that needs to be scanned/entered on existing device (Device A - e.g., Vivo)
 /// Polling is handled by the login screen via bootstrap API polling
 class DevicePairingDialog extends StatefulWidget {
   final String otp;
+  final String? pairingToken;
   final VoidCallback? onCancel;
   final VoidCallback? onApproved; // Called when pairing is approved (from parent polling)
 
   const DevicePairingDialog({
     Key? key,
     required this.otp,
+    this.pairingToken,
     this.onCancel,
     this.onApproved,
   }) : super(key: key);
@@ -30,7 +34,14 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
   void initState() {
     super.initState();
     // Polling is handled by parent (login screen) via bootstrap API
-    // This dialog just displays the OTP and waits for onApproved callback
+    // This dialog just displays the QR code/OTP and waits for onApproved callback
+  }
+
+  /// Generate pairing URL that Device A can scan
+  /// Format: https://idp.pollus.tech/pair?pairingToken=<token>
+  String _generatePairingUrl(String pairingToken) {
+    final baseUrl = ApiConstants.baseUrl.replaceAll('/api', '');
+    return '$baseUrl/pair?pairingToken=$pairingToken';
   }
 
   @override
@@ -100,7 +111,7 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
 
               // Description
               Text(
-                'E2E encryption is set up on another device.\nPlease approve this login from your existing device.',
+                'E2E encryption is set up on another device.\nScan the QR code or enter the OTP on your existing device.',
                 style: TextStyle(
                   fontFamily: 'OpenSans',
                   fontSize: 14,
@@ -109,6 +120,54 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
+
+              // QR Code Section (if pairingToken is available)
+              if (widget.pairingToken != null && widget.pairingToken!.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: ColorConstants.gradientEnd4.withOpacity(0.5),
+                      width: 2,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Scan this QR code on your existing device:',
+                        style: TextStyle(
+                          fontFamily: 'OpenSans',
+                          fontSize: 14,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      // Generate URL with pairingToken
+                      QrImageView(
+                        data: _generatePairingUrl(widget.pairingToken!),
+                        version: QrVersions.auto,
+                        size: 200.0,
+                        backgroundColor: Colors.white,
+                        errorCorrectionLevel: QrErrorCorrectLevel.M,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'QR code valid for 2 minutes',
+                        style: TextStyle(
+                          fontFamily: 'OpenSans',
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
 
               // OTP Section
               Container(

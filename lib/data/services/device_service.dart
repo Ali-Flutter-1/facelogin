@@ -4,20 +4,20 @@ import 'package:facelogin/core/constants/app_constants.dart';
 import 'package:facelogin/core/services/device_service.dart' as device_id_service;
 import 'package:facelogin/data/models/device_model.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
 /// Service for API calls related to device management
 /// Handles fetching and linking devices via API
 class DeviceApiService {
   final http.Client _client = http.Client();
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final device_id_service.DeviceService _deviceIdService = device_id_service.DeviceService();
 
   /// Fetch all devices for the current user
   Future<List<DeviceModel>> getAllDevices() async {
     try {
-      final accessToken = await _storage.read(key: AppConstants.accessTokenKey);
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString(AppConstants.accessTokenKey);
       if (accessToken == null || accessToken.isEmpty) {
         throw Exception('No access token found');
       }
@@ -107,7 +107,8 @@ class DeviceApiService {
     try {
       debugPrint('📱 Link Device: Starting with QR code data: $qrCodeData');
       
-      final accessToken = await _storage.read(key: AppConstants.accessTokenKey);
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString(AppConstants.accessTokenKey);
       if (accessToken == null || accessToken.isEmpty) {
         debugPrint('❌ Link Device: No access token found');
         throw Exception('No access token found. Please login again.');
