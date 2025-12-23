@@ -352,12 +352,9 @@ class E2EService {
         }
         
         // Check if E2E is set up on another device (requires pairing)
-        if (errorCode == 'E2E_SETUP_ON_OTHER_DEVICE' || 
-            errorMessage.contains('E2E encryption is set up on another device') ||
-            errorMessage.contains('E2E encryption exists for this user on another device') ||
-            errorMessage.contains('This device needs to be paired') ||
-            errorMessage.contains('device pairing required') ||
-            errorMessage.contains('pairing')) {
+        // Simple check: if error message equals the exact pairing message
+        const String pairingMessage = "E2E encryption exists for this user on another device. This device needs to be paired.";
+        if (errorMessage == pairingMessage || errorMessage.trim() == pairingMessage) {
           print('🔐 E2E Status: E2E set up on another device - pairing required');
           return E2EBootstrapResult.pairingRequired(errorMessage);
         }
@@ -481,10 +478,16 @@ class E2EService {
         print('🔐 E2E Status: Status from server: $status');
         print('🔐 E2E Status: Message from server: $message');
         
+        // Check for exact pairing message
+        const String pairingMessage = "E2E encryption exists for this user on another device. This device needs to be paired.";
+        if (message != null && (message.toString() == pairingMessage || message.toString().trim() == pairingMessage)) {
+          print('🔐 E2E Status: Device needs pairing - exact message match');
+          return E2EBootstrapResult.pairingRequired(message.toString());
+        }
+        
         // Check for E2E_NOT_SETUP_FOR_THIS_DEVICE status (pairing required)
         if (status == 'E2E_NOT_SETUP_FOR_THIS_DEVICE' || 
-            status == 'NEW_DEVICE_NEEDS_PAIRING' ||
-            (message != null && message.toString().contains('needs to be paired'))) {
+            status == 'NEW_DEVICE_NEEDS_PAIRING') {
           print('🔐 E2E Status: Device needs pairing - checking if pairing was requested');
           
           // Check if we're in pairing flow (have SKd from requestPairing)
