@@ -569,6 +569,18 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
           
+          // Check if pairing is required FIRST (before checking errors)
+          // This must be checked first because pairingRequired also sets error message
+          if (authResult.needsPairing) {
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+            });
+            // Show pairing dialog with QR code and OTP
+            await _handleDevicePairing(context, authRepo);
+            return;
+          }
+          
           // Check if auth failed
           if (authResult.isError) {
             setState(() {
@@ -580,13 +592,6 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             });
             showCustomToast(context, authResult.error ?? "Failed to save session. Please try again.", isError: true);
             _handleRetry();
-            return;
-          }
-          
-          // Check if pairing is required
-          if (authResult.needsPairing) {
-            // Show pairing dialog
-            await _handleDevicePairing(context, authRepo);
             return;
           }
           
@@ -742,6 +747,18 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
           
+          // Check if pairing is required FIRST (before checking errors)
+          // This must be checked first because pairingRequired also sets error message
+          if (authResult.needsPairing) {
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+            });
+            // Show pairing dialog with QR code and OTP
+            await _handleDevicePairing(context, authRepo);
+            return;
+          }
+          
           // Check if auth failed
           if (authResult.isError) {
             setState(() {
@@ -753,13 +770,6 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             });
             showCustomToast(context, authResult.error ?? "Failed to save session. Please try again.", isError: true);
             _handleRetry();
-            return;
-          }
-          
-          // Check if pairing is required
-          if (authResult.needsPairing) {
-            // Show pairing dialog
-            await _handleDevicePairing(context, authRepo);
             return;
           }
           

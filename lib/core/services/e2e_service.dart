@@ -352,10 +352,19 @@ class E2EService {
         }
         
         // Check if E2E is set up on another device (requires pairing)
-        // Simple check: if error message equals the exact pairing message
+        // Check if error message contains the pairing keywords (flexible matching)
         const String pairingMessage = "E2E encryption exists for this user on another device. This device needs to be paired.";
-        if (errorMessage == pairingMessage || errorMessage.trim() == pairingMessage) {
+        final normalizedErrorMessage = errorMessage.trim().toLowerCase();
+        final normalizedPairingMessage = pairingMessage.trim().toLowerCase();
+        
+        if (errorMessage == pairingMessage || 
+            errorMessage.trim() == pairingMessage ||
+            normalizedErrorMessage == normalizedPairingMessage ||
+            (normalizedErrorMessage.contains('e2e encryption exists') && 
+             normalizedErrorMessage.contains('another device') && 
+             normalizedErrorMessage.contains('needs to be paired'))) {
           print('🔐 E2E Status: E2E set up on another device - pairing required');
+          print('🔐 E2E Status: Error message: $errorMessage');
           return E2EBootstrapResult.pairingRequired(errorMessage);
         }
         
@@ -478,11 +487,22 @@ class E2EService {
         print('🔐 E2E Status: Status from server: $status');
         print('🔐 E2E Status: Message from server: $message');
         
-        // Check for exact pairing message
+        // Check for pairing message (flexible matching)
         const String pairingMessage = "E2E encryption exists for this user on another device. This device needs to be paired.";
-        if (message != null && (message.toString() == pairingMessage || message.toString().trim() == pairingMessage)) {
-          print('🔐 E2E Status: Device needs pairing - exact message match');
-          return E2EBootstrapResult.pairingRequired(message.toString());
+        if (message != null) {
+          final messageStr = message.toString().trim();
+          final normalizedMessage = messageStr.toLowerCase();
+          final normalizedPairingMessage = pairingMessage.trim().toLowerCase();
+          
+          if (messageStr == pairingMessage || 
+              normalizedMessage == normalizedPairingMessage ||
+              (normalizedMessage.contains('e2e encryption exists') && 
+               normalizedMessage.contains('another device') && 
+               normalizedMessage.contains('needs to be paired'))) {
+            print('🔐 E2E Status: Device needs pairing - message match');
+            print('🔐 E2E Status: Message: $messageStr');
+            return E2EBootstrapResult.pairingRequired(messageStr);
+          }
         }
         
         // Check for E2E_NOT_SETUP_FOR_THIS_DEVICE status (pairing required)
