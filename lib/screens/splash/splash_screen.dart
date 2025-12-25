@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:facelogin/screens/login/login_screen.dart';
+import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -32,13 +33,31 @@ class _SplashScreenState extends State<SplashScreen> {
     if (accessToken != null && accessToken.isNotEmpty) {
       final isExpired = _isTokenExpired(accessToken);
       if (!isExpired) {
-
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const ProfileScreen()),
-        );
-        return;
+        // SECURITY: Verify E2E keys are set up before allowing navigation
+        // This prevents bypassing pairing by restarting the app
+        final e2eService = E2EService();
+        final hasE2EKeys = await e2eService.hasE2EKeys();
+        final hasSessionKu = await e2eService.getSessionKu() != null;
+        
+        debugPrint('🔐 [SPLASH] E2E Keys Check - SKd: $hasE2EKeys, Ku: $hasSessionKu');
+        
+        if (hasE2EKeys && hasSessionKu) {
+          // Both keys present - safe to navigate to profile
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          );
+          return;
+        } else {
+          // E2E keys missing - clear tokens and force login (which will trigger pairing)
+          debugPrint('🔐 [SPLASH] ⚠️ SECURITY: E2E keys missing - clearing tokens and forcing login');
+          debugPrint('🔐 [SPLASH] This prevents bypassing pairing by restarting app');
+          await prefs.remove('access_token');
+          await prefs.remove('refresh_token');
+          await _secureStorage.delete(key: 'e2e_ku_session'); // Clear session key
+          // Note: SKd might exist from incomplete pairing - that's OK, will be overwritten
+        }
       } else {
         // Token expired - clear only auth tokens, preserve E2E keys (SKd) and device ID
         await prefs.remove('access_token');
@@ -106,30 +125,33 @@ class _SplashScreenState extends State<SplashScreen> {
               const SizedBox(height: 30),
 
               // Title
-              Text(
-                "The AI era is drowning in noise",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontFamily: 'OpenSans',
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  height: 1.3,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Text(
+                  "The AI era is drowning in noise",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontFamily: 'OpenSans',
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    height: 1.3,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
               ),
 
               const SizedBox(height: 10),
 
               // Description
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 12.0),
+                padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 12.0),
                 child: Text(
                   "Valyd verifies identity,credentials, and responses—instantly—so you can trust every insight and eliminate friction",
                   style: TextStyle(

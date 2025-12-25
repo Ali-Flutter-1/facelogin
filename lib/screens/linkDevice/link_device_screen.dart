@@ -6,7 +6,6 @@ import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/data/models/device_model.dart';
 import 'package:facelogin/data/services/device_service.dart' as device_api;
 import 'package:facelogin/data/services/pairing_service.dart';
-import 'package:facelogin/screens/pairing/otp_approval_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -26,7 +25,7 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
   List<DeviceModel> _devices = [];
   bool _isLoading = true;
   bool _isRefreshing = false;
-  String _selectedOption = 'scan'; // 'scan' or 'otp'
+  MobileScannerController? _scannerController;
 
   @override
   void initState() {
@@ -36,6 +35,7 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
 
   @override
   void dispose() {
+    _scannerController?.dispose();
     super.dispose();
   }
 
@@ -199,29 +199,77 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
     await _fetchDevices();
   }
 
-
   void _openQRScanner() {
+    // Dispose existing controller if any
+    if (_scannerController != null) {
+      _scannerController?.stop();
+      _scannerController?.dispose();
+      _scannerController = null;
+    }
+
+    _scannerController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      facing: CameraFacing.back,
+    );
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => _QRScannerBottomSheet(
+        controller: _scannerController!,
         onScan: (String code) async {
-          // Close scanner first
-          if (Navigator.canPop(context)) {
-            Navigator.pop(context);
-          }
-
           debugPrint('📱 QR Code Scanned: $code');
           debugPrint('📱 QR Code Length: ${code.length}');
 
-          // Process the QR code as a pairing token (auto-approves)
+          // Close scanner first
+          if (mounted && Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+          
+          // Wait a bit for the bottom sheet to close
+          await Future.delayed(const Duration(milliseconds: 300));
+          
+          // Stop and dispose scanner safely
+          if (_scannerController != null) {
+            try {
+              await _scannerController?.stop();
+            } catch (e) {
+              debugPrint('⚠️ Error stopping scanner: $e');
+            }
+            try {
+              _scannerController?.dispose();
+            } catch (e) {
+              debugPrint('⚠️ Error disposing scanner: $e');
+            }
+            _scannerController = null;
+          }
+
+          // Process the QR code as a pairing token
           if (mounted) {
             await _handlePairingToken(code);
           }
         },
       ),
-    );
+    ).then((_) {
+      // Cleanup if user closes without scanning
+      // Wait a bit to ensure widget is fully closed
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && _scannerController != null) {
+          try {
+            _scannerController?.stop();
+          } catch (e) {
+            debugPrint('⚠️ Error stopping scanner on close: $e');
+          }
+          try {
+            _scannerController?.dispose();
+          } catch (e) {
+            debugPrint('⚠️ Error disposing scanner on close: $e');
+          }
+          _scannerController = null;
+        }
+      });
+    });
   }
 
   String _formatDate(DateTime? date) {
@@ -297,128 +345,20 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
                 ),
               ),
 
-              // Link Device Options (Scan QR / Enter OTP)
+              // Add Device Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: ColorConstants.gradientEnd4.withOpacity(0.3),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _selectedOption = 'scan';
-                            });
-                            _openQRScanner();
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            decoration: BoxDecoration(
-                              gradient: _selectedOption == 'scan'
-                                  ? LinearGradient(
-                                      colors: [
-                                        const Color(0xFF415A77),
-                                        const Color(0xFF1B263B),
-                                      ],
-                                    )
-                                  : null,
-                              color: _selectedOption == 'scan' ? null : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.qr_code_scanner,
-                                  color: _selectedOption == 'scan'
-                                      ? Colors.white
-                                      : ColorConstants.primaryTextColor,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Scan QR',
-                                  style: TextStyle(
-                                    fontFamily: 'OpenSans',
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: _selectedOption == 'scan'
-                                        ? Colors.white
-                                        : ColorConstants.primaryTextColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _selectedOption = 'otp';
-                            });
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const OtpApprovalScreen(),
-                              ),
-                            ).then((_) => _fetchDevices());
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            decoration: BoxDecoration(
-                              gradient: _selectedOption == 'otp'
-                                  ? LinearGradient(
-                                      colors: [
-                                        const Color(0xFF415A77),
-                                        const Color(0xFF1B263B),
-                                      ],
-                                    )
-                                  : null,
-                              color: _selectedOption == 'otp' ? null : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.pin,
-                                  color: _selectedOption == 'otp'
-                                      ? Colors.white
-                                      : ColorConstants.primaryTextColor,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Enter OTP',
-                                  style: TextStyle(
-                                    fontFamily: 'OpenSans',
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: _selectedOption == 'otp'
-                                        ? Colors.white
-                                        : ColorConstants.primaryTextColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                child: CustomButton(
+                  text: 'Add Device',
+                  onPressed: _openQRScanner,
+                  backgroundColor: const Color(0xFF415A77),
+                  textColor: Colors.white,
+                  height: 56,
+                  borderRadius: BorderRadius.circular(16),
+                  image: const Icon(
+                    Icons.qr_code_scanner,
+                    color: Colors.white,
+                    size: 24,
                   ),
                 ),
               ),
@@ -690,9 +630,11 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
 }
 
 class _QRScannerBottomSheet extends StatefulWidget {
+  final MobileScannerController controller;
   final Function(String) onScan;
 
   const _QRScannerBottomSheet({
+    required this.controller,
     required this.onScan,
   });
 
@@ -701,42 +643,23 @@ class _QRScannerBottomSheet extends StatefulWidget {
 }
 
 class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
-  MobileScannerController? _controller;
   bool _isProcessing = false;
   String? _lastScannedCode;
   DateTime? _lastScanTime;
   String? _pendingCode;
   DateTime? _pendingCodeTime;
   bool _isConfirming = false;
-  bool _isDisposed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Create controller in initState
-    _controller = MobileScannerController(
-      detectionSpeed: DetectionSpeed.noDuplicates,
-      facing: CameraFacing.back,
-    );
-  }
 
   @override
   void dispose() {
-    _isDisposed = true;
-    // Safely stop and dispose controller
-    _controller?.stop();
-    _controller?.dispose();
-    _controller = null;
-    super.dispose();
-  }
-
-  Future<void> _safeStopController() async {
-    if (_isDisposed || _controller == null) return;
+    // Don't dispose controller here - let parent handle it
+    // Just stop it safely
     try {
-      await _controller?.stop();
+      widget.controller.stop();
     } catch (e) {
-      debugPrint('⚠️ Error stopping scanner controller: $e');
+      debugPrint('⚠️ Error stopping scanner in dispose: $e');
     }
+    super.dispose();
   }
 
   @override
@@ -780,8 +703,12 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                     Icons.close,
                     color: ColorConstants.primaryTextColor,
                   ),
-                  onPressed: () async {
-                    await _safeStopController();
+                  onPressed: () {
+                    try {
+                      widget.controller.stop();
+                    } catch (e) {
+                      debugPrint('⚠️ Error stopping scanner on close: $e');
+                    }
                     if (mounted && Navigator.canPop(context)) {
                       Navigator.pop(context);
                     }
@@ -793,19 +720,17 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
 
           // Scanner
           Expanded(
-            child: _controller == null
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: ColorConstants.gradientEnd4,
-                    ),
-                  )
-                : Stack(
-                    children: [
-                      MobileScanner(
-                        controller: _controller!,
+            child: Stack(
+              children: [
+                // Wrap MobileScanner to handle disposed controller gracefully
+                Builder(
+                  builder: (context) {
+                    try {
+                      return MobileScanner(
+                        controller: widget.controller,
                         onDetect: (capture) async {
-                          // Prevent processing if already processing or disposed
-                          if (_isProcessing || _isDisposed || _controller == null) return;
+                    // Prevent processing if already processing
+                    if (_isProcessing) return;
 
                     final List<Barcode> barcodes = capture.barcodes;
                     if (barcodes.isEmpty) {
@@ -839,17 +764,19 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                           });
 
                           // Stop the scanner to prevent further detections
-                          await _safeStopController();
+                          try {
+                            await widget.controller.stop();
+                          } catch (e) {
+                            debugPrint('⚠️ Error stopping scanner: $e');
+                          }
 
                           debugPrint('📱 QR Code Scanned (after 1s delay): $code');
 
                           // Small delay to show processing state
                           await Future.delayed(const Duration(milliseconds: 300));
 
-                          // Call the callback only if still mounted
-                          if (mounted && !_isDisposed) {
-                            widget.onScan(code);
-                          }
+                          // Call the callback
+                          widget.onScan(code);
                           return;
                         }
                         // Same code but less than 1 second - keep waiting
@@ -878,6 +805,19 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                       _isConfirming = true;
                     });
                     debugPrint('📱 QR Code detected, waiting 1 second to confirm: $code');
+                  },
+                      );
+                    } catch (e) {
+                      debugPrint('⚠️ Error initializing scanner: $e');
+                      return const Center(
+                        child: Text(
+                          'Scanner unavailable',
+                          style: TextStyle(
+                            color: ColorConstants.primaryTextColor,
+                          ),
+                        ),
+                      );
+                    }
                   },
                 ),
 

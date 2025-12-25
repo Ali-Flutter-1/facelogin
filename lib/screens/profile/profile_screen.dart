@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:facelogin/components/kyc.dart';
+import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/screens/kyc/kyc_screen.dart';
 import 'package:facelogin/screens/linkDevice/link_device_screen.dart';
 import 'package:facelogin/screens/pairing/otp_approval_screen.dart';
@@ -648,17 +649,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                           text: 'Link Devices',
                           icon: Icons.link,
                           height: 60,
-                          onPressed: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) =>
-                                  const LinkDeviceScreen()),
-                            );
-
+                          onPressed: () {
+                            _showLinkDeviceOptions(context);
                           },
                         ),
 
+                        
                         const SizedBox(height: 16),
                         PremiumButton(
                           text: 'Edit Information',
@@ -699,21 +695,244 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  void _showLinkDeviceOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF1B263B),
+              Color(0xFF415A77),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
+            // Title
+            const Text(
+              'Link New Device',
+              style: TextStyle(
+                fontFamily: 'OpenSans',
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Choose how you want to link your device',
+              style: TextStyle(
+                fontFamily: 'OpenSans',
+                fontSize: 14,
+                color: Colors.white.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Scan QR Code Option
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LinkDeviceScreen(),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1.5,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF415A77).withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_scanner,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Scan QR Code',
+                            style: TextStyle(
+                              fontFamily: 'OpenSans',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Scan the QR code from your new device',
+                            style: TextStyle(
+                              fontFamily: 'OpenSans',
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Enter OTP Option
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const OtpApprovalScreen(),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1.5,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF415A77).withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.pin,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Enter OTP',
+                            style: TextStyle(
+                              fontFamily: 'OpenSans',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Enter the 6-digit code from your new device',
+                            style: TextStyle(
+                              fontFamily: 'OpenSans',
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Cancel Button
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontFamily: 'OpenSans',
+                  fontSize: 16,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> logout(BuildContext context) async {
     try {
-      // 1. Clear only auth tokens and session keys (NOT E2E keys)
-      // E2E keys (SKd) must remain on device for future logins
+      // 1. Clear auth tokens and session keys
       final prefs = await SharedPreferences.getInstance();
       const secureStorage = FlutterSecureStorage();
 
-      // Only delete auth tokens, preserve E2E keys
+      // Clear auth tokens
       await prefs.remove('access_token');
       await prefs.remove('refresh_token');
       await secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
 
+      // DO NOT clear device owner - owner can log back in
+      // Device owner persists even after logout
+      // Only the original owner can login on this device
+      debugPrint('🔐 [LOGOUT] Device owner preserved - Only owner can log back in');
+
       // DO NOT delete:
-      // - e2e_skd (Device Private Key - must stay on device)
+      // - e2e_skd (Device Private Key - must stay for owner to log back in)
       // - device_id (Device ID - must stay on device)
+      // - device_owner_user_id (Device Owner - must stay so owner can log back in)
 
       // 2. Clear SharedPreferences (non-sensitive app data)
       await prefs.clear();

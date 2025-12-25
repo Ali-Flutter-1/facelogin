@@ -1,28 +1,13 @@
 import 'dart:async';
 import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/constants/color_constants.dart';
+import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/customWidgets/custom_button.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-
-/// Result class for QR code regeneration
-class PairingRegenerateResult {
-  final bool isSuccess;
-  final String? pairingToken;
-  final String? otp;
-  final String? error;
-
-  PairingRegenerateResult.success({required this.pairingToken, required this.otp})
-      : isSuccess = true,
-        error = null;
-
-  PairingRegenerateResult.error(this.error)
-      : isSuccess = false,
-        pairingToken = null,
-        otp = null;
-}
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:facelogin/core/constants/app_constants.dart';
 
 /// Dialog shown on new device (Device B - e.g., Oppo) 
 /// Displays QR code and OTP that needs to be scanned/entered on existing device (Device A - e.g., Vivo)
@@ -32,7 +17,7 @@ class DevicePairingDialog extends StatefulWidget {
   final String? pairingToken;
   final VoidCallback? onCancel;
   final VoidCallback? onApproved; // Called when pairing is approved (from parent polling)
-  final Future<PairingRegenerateResult> Function()? onRegenerateQR; // Called to regenerate QR code
+  final Function(String newOtp, String? newPairingToken)? onRegenerate; // Called when QR code is regenerated
 
   const DevicePairingDialog({
     Key? key,
@@ -40,7 +25,7 @@ class DevicePairingDialog extends StatefulWidget {
     this.pairingToken,
     this.onCancel,
     this.onApproved,
-    this.onRegenerateQR,
+    this.onRegenerate,
   }) : super(key: key);
 
   @override
@@ -50,83 +35,97 @@ class DevicePairingDialog extends StatefulWidget {
 class _DevicePairingDialogState extends State<DevicePairingDialog> {
   bool _isPolling = true;
   bool _isApproved = false;
+  Timer? _qrCodeTimer;
+  String _currentOtp;
   String? _currentPairingToken;
-  String? _currentOtp;
-  Timer? _qrRegenerationTimer;
-  int _qrGenerationCount = 0;
+  int _remainingSeconds = 300; // 5 minutes = 300 seconds
+
+  _DevicePairingDialogState() : _currentOtp = '', _currentPairingToken = null;
 
   @override
   void initState() {
     super.initState();
-    _currentPairingToken = widget.pairingToken;
     _currentOtp = widget.otp;
+    _currentPairingToken = widget.pairingToken;
     
-    // Auto-regenerate QR code after 5 minutes
-    if (widget.pairingToken != null && widget.pairingToken!.isNotEmpty) {
-      _startQRRegenerationTimer();
-    }
+    // Start timer for QR code expiration (5 minutes)
+    _startQrCodeTimer();
   }
 
   @override
   void dispose() {
-    _qrRegenerationTimer?.cancel();
+    _qrCodeTimer?.cancel();
     super.dispose();
   }
 
-  void _startQRRegenerationTimer() {
-    _qrRegenerationTimer?.cancel();
-    _qrRegenerationTimer = Timer(const Duration(minutes: 5), () {
-      _regenerateQRCode();
+  void _startQrCodeTimer() {
+    _remainingSeconds = 300; // Reset to 5 minutes
+    _qrCodeTimer?.cancel();
+    
+    _qrCodeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      setState(() {
+        _remainingSeconds--;
+      });
+      
+      if (_remainingSeconds <= 0) {
+        timer.cancel();
+        _regenerateQrCode();
+      }
     });
   }
 
-  Future<void> _regenerateQRCode() async {
-    if (!mounted) return;
-    
-    setState(() {
-      _isPolling = true; // Show loading state
-    });
-    
+  Future<void> _regenerateQrCode() async {
     try {
-      debugPrint('🔄 [QR] Auto-regenerating QR code after 5 minutes...');
+      debugPrint('🔄 [PAIRING] Regenerating QR code after 5 minutes...');
       
-      if (widget.onRegenerateQR != null) {
-        final result = await widget.onRegenerateQR!();
-        if (result.isSuccess && mounted) {
-          setState(() {
-            _currentPairingToken = result.pairingToken;
-            _currentOtp = result.otp;
-            _qrGenerationCount++;
-            _isPolling = false;
-          });
-          debugPrint('🔄 [QR] QR code regenerated successfully (count: $_qrGenerationCount)');
-          // Restart timer for next regeneration
-          _startQRRegenerationTimer();
-        } else {
-          debugPrint('❌ [QR] Failed to regenerate QR code: ${result.error}');
-          if (mounted) {
-            setState(() {
-              _isPolling = false;
-            });
-          }
+      // Get access token
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString(AppConstants.accessTokenKey);
+      
+      if (accessToken == null || accessToken.isEmpty) {
+        debugPrint('❌ [PAIRING] No access token found for QR regeneration');
+        return;
+      }
+      
+      // Request new pairing
+      final e2eService = E2EService();
+      final newPairingResult = await e2eService.requestDevicePairing(accessToken);
+      
+      if (newPairingResult.isSuccess && newPairingResult.otp != null) {
+        setState(() {
+          _currentOtp = newPairingResult.otp!;
+          _currentPairingToken = newPairingResult.pairingToken;
+        });
+        
+        // Restart timer
+        _startQrCodeTimer();
+        
+        // Notify parent if callback provided
+        if (widget.onRegenerate != null) {
+          widget.onRegenerate!(_currentOtp, _currentPairingToken);
+        }
+        
+        debugPrint('✅ [PAIRING] QR code regenerated successfully');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('QR code regenerated. Please scan the new code.'),
+              backgroundColor: ColorConstants.gradientEnd4,
+              duration: Duration(seconds: 3),
+            ),
+          );
         }
       } else {
-        // No callback provided, just restart timer
-        _qrGenerationCount++;
-        if (mounted) {
-          setState(() {
-            _isPolling = false;
-          });
-          _startQRRegenerationTimer();
-        }
+        debugPrint('❌ [PAIRING] Failed to regenerate QR code: ${newPairingResult.error}');
       }
     } catch (e) {
-      debugPrint('❌ [QR] Failed to regenerate QR code: $e');
-      if (mounted) {
-        setState(() {
-          _isPolling = false;
-        });
-      }
+      debugPrint('❌ [PAIRING] Error regenerating QR code: $e');
     }
   }
 
@@ -215,8 +214,7 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
               const SizedBox(height: 24),
 
               // QR Code Section (if pairingToken is available)
-              if ((_currentPairingToken ?? widget.pairingToken) != null && 
-                  (_currentPairingToken ?? widget.pairingToken)!.isNotEmpty) ...[
+              if (widget.pairingToken != null && widget.pairingToken!.isNotEmpty) ...[
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -240,7 +238,7 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
-                      // Generate URL with current pairingToken
+                      // Generate URL with pairingToken
                       QrImageView(
                         data: _generatePairingUrl(_currentPairingToken ?? widget.pairingToken!),
                         version: QrVersions.auto,
@@ -250,45 +248,20 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'QR code valid for 5 minutes',
+                        _remainingSeconds > 0
+                            ? 'QR code valid for ${(_remainingSeconds ~/ 60)}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}'
+                            : 'Regenerating QR code...',
                         style: TextStyle(
                           fontFamily: 'OpenSans',
                           fontSize: 12,
                           color: Colors.black54,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (_qrGenerationCount > 0) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Auto-regenerated ${_qrGenerationCount}x',
-                          style: TextStyle(
-                            fontFamily: 'OpenSans',
-                            fontSize: 11,
-                            color: Colors.green,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
-              ],
-
-              // Loading indicator when regenerating QR
-              if (_isPolling && _qrGenerationCount > 0) ...[
-                const SizedBox(height: 16),
-                const CircularProgressIndicator(),
-                const SizedBox(height: 8),
-                const Text(
-                  'Regenerating QR code...',
-                  style: TextStyle(
-                    fontFamily: 'OpenSans',
-                    fontSize: 12,
-                    color: ColorConstants.primaryTextColor,
-                  ),
-                ),
-                const SizedBox(height: 16),
               ],
 
               // OTP Section
@@ -317,7 +290,7 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
                     // OTP Display
                     GestureDetector(
                       onTap: () {
-                        Clipboard.setData(ClipboardData(text: _currentOtp ?? widget.otp));
+                        Clipboard.setData(ClipboardData(text: _currentOtp));
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: const Text('OTP copied to clipboard!'),
@@ -343,19 +316,19 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              _currentOtp ?? widget.otp,
+                              _currentOtp,
                               style: const TextStyle(
                                 fontFamily: 'OpenSans',
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
+                                letterSpacing: 8,
                                 color: ColorConstants.primaryTextColor,
-                                letterSpacing: 4,
                               ),
                             ),
                             const SizedBox(width: 12),
-                            Icon(
+                            const Icon(
                               Icons.copy,
-                              color: ColorConstants.gradientEnd4,
+                              color: ColorConstants.primaryTextColor,
                               size: 20,
                             ),
                           ],
@@ -363,12 +336,12 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       'Tap to copy',
                       style: TextStyle(
                         fontFamily: 'OpenSans',
-                        fontSize: 11,
-                        color: ColorConstants.primaryTextColor,
+                        fontSize: 12,
+                        color: ColorConstants.primaryTextColor.withOpacity(0.6),
                       ),
                     ),
                   ],
@@ -376,74 +349,60 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
               ),
               const SizedBox(height: 24),
 
-              // Status message
+              // Status
               if (_isPolling && !_isApproved)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: ColorConstants.gradientEnd4.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            ColorConstants.gradientEnd4,
-                          ),
-                        ),
+                Column(
+                  children: [
+                    const CircularProgressIndicator(
+                      color: ColorConstants.gradientEnd4,
+                      strokeWidth: 2,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Waiting for approval...',
+                      style: TextStyle(
+                        fontFamily: 'OpenSans',
+                        fontSize: 14,
+                        color: ColorConstants.primaryTextColor.withOpacity(0.7),
                       ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Waiting for approval...',
-                        style: TextStyle(
-                          fontFamily: 'OpenSans',
-                          fontSize: 12,
-                          color: ColorConstants.primaryTextColor,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
 
               if (_isApproved)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 16),
-                      SizedBox(width: 12),
-                      Text(
-                        'Pairing approved!',
-                        style: TextStyle(
-                          fontFamily: 'OpenSans',
-                          fontSize: 12,
-                          color: Colors.green,
-                        ),
+                Column(
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Device paired successfully!',
+                      style: TextStyle(
+                        fontFamily: 'OpenSans',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // Cancel button
+              // Cancel Button
               CustomButton(
                 text: 'Cancel',
                 onPressed: () {
                   widget.onCancel?.call();
+                  Navigator.pop(context);
                 },
-                backgroundColor: Colors.red.withOpacity(0.3),
-                textColor: Colors.red,
+                backgroundColor: ColorConstants.gradientEnd4.withOpacity(0.3),
+                textColor: ColorConstants.primaryTextColor,
+                height: 48,
+                borderRadius: BorderRadius.circular(12),
               ),
             ],
           ),
@@ -452,3 +411,4 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
     );
   }
 }
+

@@ -7,7 +7,6 @@ import 'package:camera/camera.dart';
 import 'package:facelogin/constant/constant.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/customWidgets/device_pairing_dialog.dart';
-import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/screens/profile/profile_screen.dart';
 import 'package:facelogin/data/repositories/auth_repository.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
@@ -18,6 +17,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:facelogin/core/constants/app_constants.dart';
 
 class GlassMorphismLoginScreen extends StatefulWidget {
   const GlassMorphismLoginScreen({Key? key}) : super(key: key);
@@ -1026,7 +1027,18 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         builder: (dialogContext) => DevicePairingDialog(
           otp: pairingResult.otp!,
           pairingToken: pairingResult.pairingToken,
-          onCancel: () {
+          onCancel: () async {
+            // SECURITY: Clear tokens when pairing is cancelled
+            // This prevents bypassing pairing by cancelling and restarting app
+            debugPrint('🔐 [PAIRING] Pairing cancelled - clearing tokens');
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('access_token');
+            await prefs.remove('refresh_token');
+            
+            // Clear session key (Ku) but keep SKd in case user wants to retry
+            final secureStorage = const FlutterSecureStorage();
+            await secureStorage.delete(key: 'e2e_ku_session');
+            
             Navigator.pop(dialogContext);
             setState(() {
               _isProcessing = false;
@@ -1043,25 +1055,10 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               );
             }
           },
-          onRegenerateQR: () async {
-            // Regenerate QR code after 5 minutes
-            debugPrint('🔄 [PAIRING] Regenerating QR code...');
-            try {
-              final newPairingResult = await e2eService.requestDevicePairing(accessToken);
-              if (newPairingResult.isSuccess && newPairingResult.otp != null) {
-                return PairingRegenerateResult.success(
-                  pairingToken: newPairingResult.pairingToken ?? '',
-                  otp: newPairingResult.otp!,
-                );
-              } else {
-                return PairingRegenerateResult.error(
-                  newPairingResult.error ?? 'Failed to regenerate QR code'
-                );
-              }
-            } catch (e) {
-              debugPrint('❌ [PAIRING] Error regenerating QR: $e');
-              return PairingRegenerateResult.error('Failed to regenerate QR code: $e');
-            }
+          onRegenerate: (newOtp, newPairingToken) {
+            // Handle QR code regeneration
+            debugPrint('🔄 [PAIRING] QR code regenerated - new OTP: $newOtp');
+            // The dialog will update itself, no action needed here
           },
         ),
       );
@@ -1339,10 +1336,10 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
 
                   const SizedBox(height: 20),
 
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-                    child: Text(
-                      "Your video never leaves your device except for secure matching",
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                      child: Text(
+                        "Your video never leaves your device except for secure matching",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,

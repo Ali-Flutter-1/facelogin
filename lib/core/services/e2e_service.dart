@@ -48,6 +48,7 @@ class E2EService {
   static const String _skdKey = 'e2e_skd'; // Device private key (P-256)
   static const String _kuKey = 'e2e_ku_session'; // User master key (AES-256, session only)
   static const String _bootstrapCompleteResponseKey = 'e2e_bootstrap_complete_response'; // Bootstrap complete API response
+  static const String _deviceOwnerUserIdKey = 'device_owner_user_id'; // First user who signed up on this device (device owner)
 
   /// Bootstrap E2E for registration (first device)
   /// Phase 2: E2E Key Bootstrap (First Device)
@@ -1186,7 +1187,39 @@ class E2EService {
   Future<void> clearAllKeys() async {
     await _storage.delete(key: _skdKey);
     await _storage.delete(key: _kuKey);
+    await clearDeviceOwner(); // Clear device owner when all keys are cleared
     debugPrint('⚠️ Cleared ALL E2E keys (including SKd) - device will need re-registration');
+  }
+
+  /// Get the device owner's user ID (first user who signed up on this device)
+  Future<String?> getDeviceOwnerUserId() async {
+    return await _storage.read(key: _deviceOwnerUserIdKey);
+  }
+
+  /// Set the device owner (first user who signs up on this device)
+  /// This user becomes the ONLY user who can login on this device
+  Future<void> setDeviceOwner(String userId) async {
+    await _storage.write(key: _deviceOwnerUserIdKey, value: userId);
+    print('🔐 Device owner set: $userId - This user is now the only user who can login on this device');
+  }
+
+  /// Clear device owner (when owner logs out completely)
+  Future<void> clearDeviceOwner() async {
+    await _storage.delete(key: _deviceOwnerUserIdKey);
+    print('🔐 Device owner cleared - New user can now sign up and become device owner');
+  }
+
+  /// Check if a user is the device owner
+  /// Returns true if user matches device owner, false if different user or no owner set
+  Future<bool> isDeviceOwner(String userId) async {
+    final ownerUserId = await getDeviceOwnerUserId();
+    if (ownerUserId == null) {
+      // No owner set yet - first user can become owner
+      return true;
+    }
+    final isOwner = ownerUserId == userId;
+    print('🔐 Device owner check - Owner: $ownerUserId, Current: $userId, Match: $isOwner');
+    return isOwner;
   }
 
   /// Check if device has E2E keys set up

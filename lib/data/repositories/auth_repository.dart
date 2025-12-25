@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:facelogin/core/constants/app_constants.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
@@ -24,6 +25,46 @@ class AuthRepository {
     if (result.isSuccess && result.data != null) {
       try {
         final accessToken = result.data!.accessToken;
+        
+        // SECURITY: Enforce one-user-per-device (device ownership)
+        // Extract user ID from JWT token and check if user is the device owner
+        String? currentUserId;
+        try {
+          if (accessToken != null) {
+            final parts = accessToken!.split('.');
+            if (parts.length == 3) {
+              final payload = jsonDecode(
+                utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+              );
+              currentUserId = payload['sub']?.toString();
+              debugPrint('🔐 [AUTH] Extracted user ID from token: $currentUserId');
+            }
+          }
+        } catch (e) {
+          debugPrint('🔐 [AUTH] Failed to extract user ID from token: $e');
+        }
+        
+        // Check if user is the device owner (first user who signed up)
+        if (currentUserId != null) {
+          final isOwner = await _e2eService.isDeviceOwner(currentUserId);
+          if (!isOwner) {
+            // Different user trying to login - BLOCK them
+            debugPrint('🔐 [AUTH] ⚠️ SECURITY: User $currentUserId is NOT the device owner');
+            debugPrint('🔐 [AUTH] Only the first user who signed up can login on this device');
+            return AuthResult.error(
+              'This device is already registered to another account.\n\n'
+              'Please use a different device'
+            );
+          } else {
+            // User is the device owner - set as owner if not already set
+            final existingOwner = await _e2eService.getDeviceOwnerUserId();
+            if (existingOwner == null) {
+              // First time login - set as device owner
+              await _e2eService.setDeviceOwner(currentUserId);
+              debugPrint('🔐 [AUTH] User $currentUserId set as device owner');
+            }
+          }
+        }
         
         // Check for pairing requirement in login response FIRST (before saving tokens)
         // The server returns pairing info in the login response when pairing is needed
@@ -223,23 +264,13 @@ class AuthRepository {
             
             // Check if this is a new user (should register) or existing user (needs pairing)
             final loginData = result.data!.data;
-            bool? isNewUser;
-            
             if (loginData != null && loginData is Map<String, dynamic>) {
               final isNewUserValue = loginData['is_new_user'];
+              bool? isNewUser;
               if (isNewUserValue is bool) {
                 isNewUser = isNewUserValue;
               } else if (isNewUserValue is String) {
                 isNewUser = isNewUserValue.toLowerCase() == 'true';
-              }
-              
-              // Also check bootstrap response for pairing requirement
-              if (e2eResult.needsPairing || 
-                  (e2eResult.error?.contains('needs to be paired') ?? false)) {
-                debugPrint('🔐 [AUTH] Bootstrap indicates pairing required - forcing pairing');
-                return AuthResult.pairingRequired(
-                  e2eResult.error ?? 'Device pairing required. Please scan QR code or enter OTP.'
-                );
               }
               
               // If existing user but keys missing, force pairing
@@ -249,14 +280,6 @@ class AuthRepository {
                   'E2E keys not found. Device pairing required. Please scan QR code or enter OTP.'
                 );
               }
-            }
-            
-            // If bootstrap says pairing needed, use that
-            if (e2eResult.needsPairing) {
-              debugPrint('🔐 [AUTH] Bootstrap response indicates pairing required');
-              return AuthResult.pairingRequired(
-                e2eResult.error ?? 'Device pairing required. Please scan QR code or enter OTP.'
-              );
             }
             
             // New user or unknown - force registration
@@ -283,16 +306,8 @@ class AuthRepository {
           print('🔐 E2E Security: Ku and SKd NEVER sent to server in plaintext');
           
           // Final verification: ensure both keys are present
-          // Add small delay to avoid race condition (keys might be saving)
-          await Future.delayed(const Duration(milliseconds: 100));
-          
-          // Re-check keys after delay
-          final finalHasE2EKeys = await _e2eService.hasE2EKeys();
-          final finalHasSessionKu = await _e2eService.getSessionKu() != null;
-          
-          if (!finalHasE2EKeys || !finalHasSessionKu) {
+          if (!hasE2EKeys || !hasSessionKu) {
             debugPrint('🔐 [AUTH] ⚠️ SECURITY: Keys not properly stored after setup - blocking login');
-            debugPrint('🔐 [AUTH] Final check - SKd: $finalHasE2EKeys, Ku: $finalHasSessionKu');
             return AuthResult.error(
               'E2E keys setup incomplete. Please try logging in again.'
             );
