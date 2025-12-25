@@ -339,6 +339,21 @@ class E2EService {
       }
 
       // Check if server says E2E is not set up
+      // Also check the entire response body for pairing message (in case it's in a different format)
+      final responseBody = bootstrapResponse.body;
+      const String pairingMessage = "E2E encryption exists for this user on another device. This device needs to be paired.";
+      final normalizedResponseBody = responseBody.toLowerCase();
+      final normalizedPairingMessage = pairingMessage.trim().toLowerCase();
+      
+      // Check entire response body first (most flexible)
+      if (normalizedResponseBody.contains('e2e encryption exists') && 
+          normalizedResponseBody.contains('another device') && 
+          normalizedResponseBody.contains('needs to be paired')) {
+        print('🔐 E2E Status: Pairing message found in response body - pairing required');
+        print('🔐 E2E Status: Response body: $responseBody');
+        return E2EBootstrapResult.pairingRequired(pairingMessage);
+      }
+      
       if (bootstrapResponse.statusCode != 200) {
         final error = bootstrapData['error'];
         String errorCode = '';
@@ -347,15 +362,15 @@ class E2EService {
         if (error != null && error is Map) {
           errorCode = error['code']?.toString() ?? '';
           errorMessage = error['message']?.toString() ?? '';
-            } else if (error is String) {
-              errorMessage = error;
+        } else if (error is String) {
+          errorMessage = error;
         }
+        
+        print('🔐 E2E Status: Error detected - Code: $errorCode, Message: $errorMessage');
         
         // Check if E2E is set up on another device (requires pairing)
         // Check if error message contains the pairing keywords (flexible matching)
-        const String pairingMessage = "E2E encryption exists for this user on another device. This device needs to be paired.";
         final normalizedErrorMessage = errorMessage.trim().toLowerCase();
-        final normalizedPairingMessage = pairingMessage.trim().toLowerCase();
         
         if (errorMessage == pairingMessage || 
             errorMessage.trim() == pairingMessage ||
@@ -402,11 +417,31 @@ class E2EService {
 
       // Status 200 - check if E2E is properly set up
       final wrappedKu = bootstrapData['data']?['wrappedKu'];
-      final status = bootstrapData['data']?['status'];
-      final message = bootstrapData['data']?['message'];
-      final reason = bootstrapData['data']?['reason'];
+      final status = bootstrapData['data']?['status']?.toString();
+      final message = bootstrapData['data']?['message']?.toString();
+      final reason = bootstrapData['data']?['reason']?.toString();
       
       print('🔐 E2E Status: Status=$status, Reason=$reason, HasWrappedKu=${wrappedKu != null}');
+      print('🔐 E2E Status: Message from server: $message');
+      
+      // PRIORITY 1: Check status and reason fields explicitly (most reliable)
+      if (status == 'E2E_NOT_SETUP_FOR_THIS_DEVICE' && 
+          (reason == 'NEW_DEVICE_NEEDS_PAIRING' || reason == null)) {
+        print('🔐 E2E Status: Pairing required - status=E2E_NOT_SETUP_FOR_THIS_DEVICE, reason=$reason');
+        return E2EBootstrapResult.pairingRequired(
+          message ?? pairingMessage
+        );
+      }
+      
+      // PRIORITY 2: Check entire response body for pairing message (even on status 200)
+      // Variables already defined above, reuse them
+      if (normalizedResponseBody.contains('e2e encryption exists') && 
+          normalizedResponseBody.contains('another device') && 
+          normalizedResponseBody.contains('needs to be paired')) {
+        print('🔐 E2E Status: Pairing message found in response (status 200) - pairing required');
+        print('🔐 E2E Status: Response body: $responseBody');
+        return E2EBootstrapResult.pairingRequired(pairingMessage);
+      }
       
       // Explicitly handle E2E_ALREADY_ACTIVE status (pairing completed)
       if (status == 'E2E_ALREADY_ACTIVE' && wrappedKu != null) {
@@ -1036,16 +1071,20 @@ class E2EService {
     );
     
     // Reconstruct SKd from seed using pointycastle
+    // IMPORTANT: The seed is used to generate the keypair, not as the private key directly
+    // We need to use the same method as in requestDevicePairing - seed the SecureRandom
     final seedBytes = skdSeedBytes.length >= 32 
         ? skdSeedBytes.sublist(0, 32) 
         : Uint8List.fromList([...skdSeedBytes, ...List.filled(32 - skdSeedBytes.length, 0)]);
     
-    // Create private key from seed bytes
-    final privateKeyBigInt = BigInt.parse(
-      seedBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
-      radix: 16,
-    );
-    final skd = ECPrivateKey(privateKeyBigInt, domainParams);
+    // Generate keypair from seed (same method as requestDevicePairing)
+    final keyGen = ECKeyGenerator();
+    final keyParams = ECKeyGeneratorParameters(domainParams);
+    final pcSecureRandom = pc.SecureRandom('Fortuna');
+    pcSecureRandom.seed(KeyParameter(seedBytes));
+    keyGen.init(ParametersWithRandom(keyParams, pcSecureRandom));
+    final pcKeyPair = keyGen.generateKeyPair();
+    final skd = pcKeyPair.privateKey as ECPrivateKey;
     
     // Perform ECDH key agreement using pointycastle
     final agreement = ECDHBasicAgreement();

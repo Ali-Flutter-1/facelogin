@@ -7,6 +7,7 @@ import 'package:camera/camera.dart';
 import 'package:facelogin/constant/constant.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/customWidgets/device_pairing_dialog.dart';
+import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/screens/profile/profile_screen.dart';
 import 'package:facelogin/data/repositories/auth_repository.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
@@ -569,9 +570,13 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
           
+          debugPrint('🔗 [LOGIN] Auth result - isSuccess: ${authResult.isSuccess}, isError: ${authResult.isError}, needsPairing: ${authResult.needsPairing}');
+          debugPrint('🔗 [LOGIN] Auth result error: ${authResult.error}');
+          
           // Check if pairing is required FIRST (before checking errors)
           // This must be checked first because pairingRequired also sets error message
           if (authResult.needsPairing) {
+            debugPrint('🔗 [LOGIN] Pairing required - showing QR code dialog');
             setState(() {
               _isProcessing = false;
               _faceDetected = false;
@@ -606,6 +611,31 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               _faceGuidanceMessage = '';
             });
             showCustomToast(context, "Failed to save session. Please try again.", isError: true);
+            _handleRetry();
+            return;
+          }
+          
+          // SECURITY: Verify E2E keys are set up before allowing navigation
+          final e2eService = E2EService();
+          final hasE2EKeys = await e2eService.hasE2EKeys();
+          final hasSessionKu = await e2eService.getSessionKu() != null;
+          
+          debugPrint('🔐 [LOGIN] Final E2E verification - SKd: $hasE2EKeys, Ku: $hasSessionKu');
+          
+          if (!hasE2EKeys || !hasSessionKu) {
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+              _statusMessage = '';
+              _subStatusMessage = '';
+              _faceGuidanceMessage = '';
+            });
+            debugPrint('🔐 [LOGIN] ⚠️ SECURITY: E2E keys missing - blocking navigation');
+            showCustomToast(
+              context, 
+              "E2E encryption setup incomplete. Please try logging in again.", 
+              isError: true
+            );
             _handleRetry();
             return;
           }
@@ -747,9 +777,13 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
           
+          debugPrint('🔗 [LOGIN] Auth result - isSuccess: ${authResult.isSuccess}, isError: ${authResult.isError}, needsPairing: ${authResult.needsPairing}');
+          debugPrint('🔗 [LOGIN] Auth result error: ${authResult.error}');
+          
           // Check if pairing is required FIRST (before checking errors)
           // This must be checked first because pairingRequired also sets error message
           if (authResult.needsPairing) {
+            debugPrint('🔗 [LOGIN] Pairing required - showing QR code dialog');
             setState(() {
               _isProcessing = false;
               _faceDetected = false;
@@ -784,6 +818,31 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               _faceGuidanceMessage = '';
             });
             showCustomToast(context, "Failed to save session. Please try again.", isError: true);
+            _handleRetry();
+            return;
+          }
+          
+          // SECURITY: Verify E2E keys are set up before allowing navigation
+          final e2eService = E2EService();
+          final hasE2EKeys = await e2eService.hasE2EKeys();
+          final hasSessionKu = await e2eService.getSessionKu() != null;
+          
+          debugPrint('🔐 [LOGIN] Final E2E verification - SKd: $hasE2EKeys, Ku: $hasSessionKu');
+          
+          if (!hasE2EKeys || !hasSessionKu) {
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+              _statusMessage = '';
+              _subStatusMessage = '';
+              _faceGuidanceMessage = '';
+            });
+            debugPrint('🔐 [LOGIN] ⚠️ SECURITY: E2E keys missing - blocking navigation');
+            showCustomToast(
+              context, 
+              "E2E encryption setup incomplete. Please try logging in again.", 
+              isError: true
+            );
             _handleRetry();
             return;
           }
@@ -984,6 +1043,26 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               );
             }
           },
+          onRegenerateQR: () async {
+            // Regenerate QR code after 5 minutes
+            debugPrint('🔄 [PAIRING] Regenerating QR code...');
+            try {
+              final newPairingResult = await e2eService.requestDevicePairing(accessToken);
+              if (newPairingResult.isSuccess && newPairingResult.otp != null) {
+                return PairingRegenerateResult.success(
+                  pairingToken: newPairingResult.pairingToken ?? '',
+                  otp: newPairingResult.otp!,
+                );
+              } else {
+                return PairingRegenerateResult.error(
+                  newPairingResult.error ?? 'Failed to regenerate QR code'
+                );
+              }
+            } catch (e) {
+              debugPrint('❌ [PAIRING] Error regenerating QR: $e');
+              return PairingRegenerateResult.error('Failed to regenerate QR code: $e');
+            }
+          },
         ),
       );
 
@@ -1000,17 +1079,19 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
   }
 
   /// Poll bootstrap API for pairing approval
-  /// Keeps calling bootstrap until wrappedKu is received (after Device A approves)
+  /// Keeps calling bootstrap indefinitely until wrappedKu is received (after Device A approves)
   Future<void> _pollForPairingApproval(
     BuildContext context,
     String accessToken,
   ) async {
     final e2eService = E2EService();
-    const maxAttempts = 60; // 2 minutes max (60 attempts * 2 seconds)
     const pollInterval = Duration(seconds: 2);
+    int attempt = 0;
 
-    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+    // Poll indefinitely until pairing is approved or user cancels
+    while (mounted) {
       await Future.delayed(pollInterval);
+      attempt++;
 
       if (!mounted) return;
 
@@ -1021,6 +1102,27 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         if (bootstrapResult.isSuccess) {
           // Pairing approved and wrappedKu received!
           debugPrint('✅ Pairing approved - wrappedKu received via bootstrap');
+          
+          // SECURITY: Verify E2E keys are set up after pairing
+          final hasE2EKeys = await e2eService.hasE2EKeys();
+          final hasSessionKu = await e2eService.getSessionKu() != null;
+          
+          debugPrint('🔐 [PAIRING] Final E2E verification - SKd: $hasE2EKeys, Ku: $hasSessionKu');
+          
+          if (!hasE2EKeys || !hasSessionKu) {
+            debugPrint('🔐 [PAIRING] ⚠️ SECURITY: E2E keys missing after pairing - blocking navigation');
+            if (mounted && Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+            if (mounted) {
+              showCustomToast(
+                context, 
+                "Pairing completed but keys setup incomplete. Please try again.", 
+                isError: true
+              );
+            }
+            return;
+          }
           
           // Close dialog if still open
           if (mounted && Navigator.canPop(context)) {
@@ -1040,8 +1142,10 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           }
           return;
         } else if (bootstrapResult.needsPairing) {
-          // Still waiting for approval - continue polling
-          debugPrint('⏳ Still waiting for pairing approval... (attempt ${attempt + 1}/$maxAttempts)');
+          // Still waiting for approval - continue polling indefinitely
+          if (attempt % 30 == 0) { // Log every 60 seconds (30 attempts * 2 seconds)
+            debugPrint('⏳ Still waiting for pairing approval... (attempt $attempt, ~${attempt * 2}s elapsed)');
+          }
           continue;
         } else {
           // Check if this is a key mismatch error (non-recoverable)
@@ -1210,7 +1314,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                   const SizedBox(height: 12),
 
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                     child: Text(
                       _isProcessing
                           ? (_subStatusMessage.isNotEmpty ? _subStatusMessage : 'Processing your face...')
@@ -1236,7 +1340,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                   const SizedBox(height: 20),
 
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                     child: Text(
                       "Your video never leaves your device except for secure matching",
                       textAlign: TextAlign.center,

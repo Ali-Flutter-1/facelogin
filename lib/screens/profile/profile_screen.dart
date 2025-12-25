@@ -658,22 +658,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                           },
                         ),
-                        const SizedBox(height: 16),
-                        PremiumButton(
-                          backgroundColor: Colors.green,
-                          textColor: Colors.white,
-                          text: 'Approve Device',
-                          icon: Icons.security,
-                          height: 60,
-                          onPressed: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) =>
-                                  const OtpApprovalScreen()),
-                            );
-                          },
-                        ),
+
                         const SizedBox(height: 16),
                         PremiumButton(
                           text: 'Edit Information',

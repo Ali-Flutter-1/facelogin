@@ -129,7 +129,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
               // Description
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0,vertical:12),
+                padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 12.0),
                 child: Text(
                   "Valyd verifies identity,credentials, and responses—instantly—so you can trust every insight and eliminate friction",
                   style: TextStyle(

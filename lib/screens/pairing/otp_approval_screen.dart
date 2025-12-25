@@ -305,23 +305,22 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
                         ],
+                        onChanged: (value) {
+                          // Auto-submit when 6 digits are entered
+                          if (value.length == 6 && !_isProcessing) {
+                            // Small delay to ensure the last digit is registered
+                            Future.delayed(const Duration(milliseconds: 100), () {
+                              if (mounted && _otpController.text.length == 6) {
+                                _lookupPairing();
+                              }
+                            });
+                          }
+                        },
                         onSubmitted: (_) => _lookupPairing(),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
-
-                // Approve Button
-                CustomButton(
-                  text: _isProcessing ? 'Processing...' : 'Approve',
-                  onPressed: _isProcessing ? () {} : () => _lookupPairing(),
-                  backgroundColor: ColorConstants.gradientEnd4,
-                  textColor: Colors.white,
-                  height: 56,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-
                 const Spacer(),
 
                 // Info
