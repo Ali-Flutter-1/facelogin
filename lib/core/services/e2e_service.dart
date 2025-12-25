@@ -11,6 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:pointycastle/export.dart' hide SecureRandom;
 import 'package:pointycastle/export.dart' as pc show SecureRandom;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// E2E Encryption Service
 /// Handles P-256 (secp256r1) ECDH key exchange and AES-GCM encryption
@@ -1192,20 +1193,26 @@ class E2EService {
   }
 
   /// Get the device owner's user ID (first user who signed up on this device)
+  /// Stored in SharedPreferences (local storage)
   Future<String?> getDeviceOwnerUserId() async {
-    return await _storage.read(key: _deviceOwnerUserIdKey);
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_deviceOwnerUserIdKey);
   }
 
   /// Set the device owner (first user who signs up on this device)
   /// This user becomes the ONLY user who can login on this device
+  /// Stored in SharedPreferences (local storage)
   Future<void> setDeviceOwner(String userId) async {
-    await _storage.write(key: _deviceOwnerUserIdKey, value: userId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_deviceOwnerUserIdKey, userId);
     print('🔐 Device owner set: $userId - This user is now the only user who can login on this device');
   }
 
   /// Clear device owner (when owner logs out completely)
+  /// Stored in SharedPreferences (local storage)
   Future<void> clearDeviceOwner() async {
-    await _storage.delete(key: _deviceOwnerUserIdKey);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_deviceOwnerUserIdKey);
     print('🔐 Device owner cleared - New user can now sign up and become device owner');
   }
 

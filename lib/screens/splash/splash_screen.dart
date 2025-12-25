@@ -30,42 +30,75 @@ class _SplashScreenState extends State<SplashScreen> {
 
     await Future.delayed(const Duration(seconds: 4)); // smooth transition
 
-    if (accessToken != null && accessToken.isNotEmpty) {
-      final isExpired = _isTokenExpired(accessToken);
-      if (!isExpired) {
-        // SECURITY: Verify E2E keys are set up before allowing navigation
-        // This prevents bypassing pairing by restarting the app
-        final e2eService = E2EService();
-        final hasE2EKeys = await e2eService.hasE2EKeys();
-        final hasSessionKu = await e2eService.getSessionKu() != null;
-        
-        debugPrint('🔐 [SPLASH] E2E Keys Check - SKd: $hasE2EKeys, Ku: $hasSessionKu');
-        
-        if (hasE2EKeys && hasSessionKu) {
-          // Both keys present - safe to navigate to profile
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ProfileScreen()),
-          );
-          return;
+      if (accessToken != null && accessToken.isNotEmpty) {
+        final isExpired = _isTokenExpired(accessToken);
+        if (!isExpired) {
+          // SECURITY: Verify E2E keys are set up before allowing navigation
+          // This prevents bypassing pairing by restarting the app
+          final e2eService = E2EService();
+          final hasE2EKeys = await e2eService.hasE2EKeys();
+          final hasSessionKu = await e2eService.getSessionKu() != null;
+
+          debugPrint('🔐 [SPLASH] E2E Keys Check - SKd: $hasE2EKeys, Ku: $hasSessionKu');
+
+          if (hasE2EKeys && hasSessionKu) {
+            // Both keys present - verify device owner matches
+            try {
+              // Extract user ID from token
+              final parts = accessToken.split('.');
+              if (parts.length == 3) {
+                final payload = jsonDecode(
+                  utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+                );
+                final currentUserId = payload['sub']?.toString();
+                
+                if (currentUserId != null) {
+                  final deviceOwner = await e2eService.getDeviceOwnerUserId();
+                  if (deviceOwner != null && deviceOwner != currentUserId) {
+                    // Different user - clear tokens and force login
+                    debugPrint('🔐 [SPLASH] ⚠️ SECURITY: Token user ($currentUserId) != device owner ($deviceOwner)');
+                    debugPrint('🔐 [SPLASH] Clearing tokens and forcing login');
+                    await prefs.remove('access_token');
+                    await prefs.remove('refresh_token');
+                    await _secureStorage.delete(key: 'e2e_ku_session');
+                    // Navigate to login
+                    if (!mounted) return;
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
+                    );
+                    return;
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint('🔐 [SPLASH] Error checking device owner: $e');
+            }
+            
+            // Both keys present and device owner matches - safe to navigate to profile
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            );
+            return;
+          } else {
+            // E2E keys missing - clear tokens and force login (which will trigger pairing)
+            debugPrint('🔐 [SPLASH] ⚠️ SECURITY: E2E keys missing - clearing tokens and forcing login');
+            debugPrint('🔐 [SPLASH] This prevents bypassing pairing by restarting app');
+            await prefs.remove('access_token');
+            await prefs.remove('refresh_token');
+            await _secureStorage.delete(key: 'e2e_ku_session'); // Clear session key
+            // Note: SKd might exist from incomplete pairing - that's OK, will be overwritten
+          }
         } else {
-          // E2E keys missing - clear tokens and force login (which will trigger pairing)
-          debugPrint('🔐 [SPLASH] ⚠️ SECURITY: E2E keys missing - clearing tokens and forcing login');
-          debugPrint('🔐 [SPLASH] This prevents bypassing pairing by restarting app');
+          // Token expired - clear only auth tokens, preserve E2E keys (SKd) and device ID
           await prefs.remove('access_token');
           await prefs.remove('refresh_token');
-          await _secureStorage.delete(key: 'e2e_ku_session'); // Clear session key
-          // Note: SKd might exist from incomplete pairing - that's OK, will be overwritten
+          await _secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
+          // DO NOT delete: e2e_skd, device_id, device_owner_user_id
         }
-      } else {
-        // Token expired - clear only auth tokens, preserve E2E keys (SKd) and device ID
-        await prefs.remove('access_token');
-        await prefs.remove('refresh_token');
-        await _secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
-        // DO NOT delete: e2e_skd, device_id
       }
-    }
 
 
     if (!mounted) return;

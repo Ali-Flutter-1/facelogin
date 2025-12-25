@@ -924,6 +924,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       await prefs.remove('refresh_token');
       await secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
 
+      // CRITICAL: Save device owner BEFORE clearing SharedPreferences
+      // We need to preserve device_owner_user_id across logout
+      final e2eService = E2EService();
+      final deviceOwner = await e2eService.getDeviceOwnerUserId();
+      
       // DO NOT clear device owner - owner can log back in
       // Device owner persists even after logout
       // Only the original owner can login on this device
@@ -935,7 +940,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       // - device_owner_user_id (Device Owner - must stay so owner can log back in)
 
       // 2. Clear SharedPreferences (non-sensitive app data)
+      // BUT preserve device_owner_user_id
       await prefs.clear();
+      
+      // 3. Restore device owner after clearing SharedPreferences
+      if (deviceOwner != null) {
+        await e2eService.setDeviceOwner(deviceOwner);
+        debugPrint('🔐 [LOGOUT] Device owner restored: $deviceOwner');
+      }
 
       // 3. Show logout confirmation
       showCustomToast(context, "Logged out successfully!");

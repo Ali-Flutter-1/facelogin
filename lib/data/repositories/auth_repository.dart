@@ -46,23 +46,58 @@ class AuthRepository {
         
         // Check if user is the device owner (first user who signed up)
         if (currentUserId != null) {
-          final isOwner = await _e2eService.isDeviceOwner(currentUserId);
-          if (!isOwner) {
-            // Different user trying to login - BLOCK them
-            debugPrint('🔐 [AUTH] ⚠️ SECURITY: User $currentUserId is NOT the device owner');
-            debugPrint('🔐 [AUTH] Only the first user who signed up can login on this device');
-            return AuthResult.error(
-              'This device is already registered to another account.\n\n'
-              'Please use a different device'
-            );
-          } else {
-            // User is the device owner - set as owner if not already set
-            final existingOwner = await _e2eService.getDeviceOwnerUserId();
-            if (existingOwner == null) {
-              // First time login - set as device owner
-              await _e2eService.setDeviceOwner(currentUserId);
-              debugPrint('🔐 [AUTH] User $currentUserId set as device owner');
+          final existingOwner = await _e2eService.getDeviceOwnerUserId();
+          
+          // Check if this is a new user signup (registration)
+          // We need to check this BEFORE the pairing check to get is_new_user value
+          final loginDataCheck = result.data!.data;
+          bool isNewUser = false;
+          if (loginDataCheck != null && loginDataCheck is Map<String, dynamic>) {
+            final isNewUserValue = loginDataCheck['is_new_user'];
+            if (isNewUserValue is bool) {
+              isNewUser = isNewUserValue;
+            } else if (isNewUserValue is String) {
+              isNewUser = isNewUserValue.toLowerCase() == 'true';
+            } else if (isNewUserValue != null) {
+              isNewUser = isNewUserValue.toString().toLowerCase() == 'true';
             }
+          }
+          
+          debugPrint('🔐 [AUTH] is_new_user: $isNewUser, existingOwner: $existingOwner');
+          
+          // CRITICAL: Block new signups if device owner exists (unless explicitly new user)
+          // This prevents different users from creating accounts on the same device
+          if (existingOwner != null) {
+            // Device owner exists - check if this is a new user signup
+            if (isNewUser == true) {
+              // New user signup on device with existing owner
+              // This is allowed only if previous account was deleted
+              debugPrint('🔐 [AUTH] New user signup detected - clearing old device owner');
+              await _e2eService.clearDeviceOwner();
+              await _e2eService.setDeviceOwner(currentUserId);
+              debugPrint('🔐 [AUTH] New user $currentUserId set as device owner');
+            } else {
+              // Existing user login or signup without is_new_user flag
+              // Check if they're the device owner
+              final isOwner = await _e2eService.isDeviceOwner(currentUserId);
+              if (!isOwner) {
+                // Different user trying to login/signup - BLOCK them
+                debugPrint('🔐 [AUTH] ⚠️ SECURITY: User $currentUserId is NOT the device owner');
+                debugPrint('🔐 [AUTH] Device owner: $existingOwner, Attempting user: $currentUserId');
+                debugPrint('🔐 [AUTH] Only the device owner can login on this device');
+                return AuthResult.error(
+                  'This device is already registered to another account.\n\n'
+                  'Please use a different device'
+                );
+              }
+              // User is the device owner - allow login
+              debugPrint('🔐 [AUTH] User $currentUserId is the device owner - allowing login');
+            }
+          } else {
+            // No device owner set yet - set current user as owner
+            // This happens on first signup or after account deletion
+            await _e2eService.setDeviceOwner(currentUserId);
+            debugPrint('🔐 [AUTH] User $currentUserId set as device owner (first time)');
           }
         }
         
@@ -123,6 +158,20 @@ class AuthRepository {
           debugPrint('🔗 [AUTH] Condition: is_new_user=$isNewUser, e2e_reason=$e2eReason, e2e_scenario=$e2eScenario');
           
           if (needsPairing) {
+            // CRITICAL: Check device owner BEFORE allowing pairing
+            // If different user tries to pair, block them
+            if (currentUserId != null) {
+              final existingOwner = await _e2eService.getDeviceOwnerUserId();
+              if (existingOwner != null && existingOwner != currentUserId) {
+                debugPrint('🔐 [AUTH] ⚠️ SECURITY: Different user trying to pair - BLOCKING');
+                debugPrint('🔐 [AUTH] Device owner: $existingOwner, Attempting user: $currentUserId');
+                return AuthResult.error(
+                  'This device is already registered to another account.\n\n'
+                  'Please use a different device'
+                );
+              }
+            }
+            
             debugPrint('🔗 [AUTH] ✅ Pairing required detected! Showing QR code dialog');
             // Save tokens first so we can use them for pairing request
             final prefs = await SharedPreferences.getInstance();
@@ -210,6 +259,20 @@ class AuthRepository {
                e2eScenarioRecheck == 'EXISTING_USER_NEEDS_PAIRING'));
           
           if (needsPairingRecheck) {
+            // CRITICAL: Check device owner BEFORE allowing pairing in re-check
+            // If different user tries to pair, block them
+            if (currentUserId != null) {
+              final existingOwnerRecheck = await _e2eService.getDeviceOwnerUserId();
+              if (existingOwnerRecheck != null && existingOwnerRecheck != currentUserId) {
+                debugPrint('🔐 [AUTH] ⚠️ SECURITY: Different user trying to pair (re-check) - BLOCKING');
+                debugPrint('🔐 [AUTH] Device owner: $existingOwnerRecheck, Attempting user: $currentUserId');
+                return AuthResult.error(
+                  'This device is already registered to another account.\n\n'
+                  'Please use a different device'
+                );
+              }
+            }
+            
             debugPrint('🔗 [AUTH] ⚠️ Pairing required detected in RE-CHECK! Blocking direct login.');
             debugPrint('🔗 [AUTH] Re-check condition: is_new_user=$isNewUserBool, e2e_reason=$e2eReasonRecheck, e2e_scenario=$e2eScenarioRecheck');
             return AuthResult.pairingRequired(e2eMessageRecheck ?? 'Device pairing required');
@@ -238,6 +301,20 @@ class AuthRepository {
         // This check MUST happen even if login response didn't have pairing fields
         // Bootstrap response is the authoritative source for pairing requirement
         if (e2eResult.needsPairing) {
+          // CRITICAL: Check device owner BEFORE allowing pairing from bootstrap
+          // If different user tries to pair, block them
+          if (currentUserId != null) {
+            final existingOwnerBootstrap = await _e2eService.getDeviceOwnerUserId();
+            if (existingOwnerBootstrap != null && existingOwnerBootstrap != currentUserId) {
+              debugPrint('🔐 [AUTH] ⚠️ SECURITY: Different user trying to pair (bootstrap) - BLOCKING');
+              debugPrint('🔐 [AUTH] Device owner: $existingOwnerBootstrap, Attempting user: $currentUserId');
+              return AuthResult.error(
+                'This device is already registered to another account.\n\n'
+                'Please use a different device'
+              );
+            }
+          }
+          
           print('🔗 E2E Pairing Required (from bootstrap response)');
           debugPrint('🔗 [AUTH] E2E encryption is set up on another device');
           debugPrint('🔗 [AUTH] E2E error message: ${e2eResult.error}');

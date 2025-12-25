@@ -1100,6 +1100,54 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           // Pairing approved and wrappedKu received!
           debugPrint('✅ Pairing approved - wrappedKu received via bootstrap');
           
+          // SECURITY: Verify device owner before allowing pairing completion
+          // Extract user ID from access token
+          String? currentUserId;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final savedToken = prefs.getString('access_token');
+            if (savedToken != null) {
+              final parts = savedToken.split('.');
+              if (parts.length == 3) {
+                // Decode JWT payload (same method as auth_repository)
+                final payload = jsonDecode(
+                  utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+                );
+                currentUserId = payload['sub']?.toString();
+              }
+            }
+          } catch (e) {
+            debugPrint('🔐 [PAIRING] Failed to extract user ID: $e');
+          }
+          
+          // Check if user is device owner (or no owner exists)
+          if (currentUserId != null) {
+            final existingOwner = await e2eService.getDeviceOwnerUserId();
+            if (existingOwner != null && existingOwner != currentUserId) {
+              debugPrint('🔐 [PAIRING] ⚠️ SECURITY: Different user completed pairing - BLOCKING');
+              debugPrint('🔐 [PAIRING] Device owner: $existingOwner, Pairing user: $currentUserId');
+              if (mounted && Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+              if (mounted) {
+                showCustomToast(
+                  context,
+                  'This device is already registered to another account. Please use a different device.',
+                  isError: true
+                );
+              }
+              // Clear tokens to prevent bypass
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('access_token');
+              await prefs.remove('refresh_token');
+              return;
+            } else if (existingOwner == null) {
+              // No device owner - set current user as owner after successful pairing
+              await e2eService.setDeviceOwner(currentUserId);
+              debugPrint('🔐 [PAIRING] Device owner set to $currentUserId after pairing');
+            }
+          }
+          
           // SECURITY: Verify E2E keys are set up after pairing
           final hasE2EKeys = await e2eService.hasE2EKeys();
           final hasSessionKu = await e2eService.getSessionKu() != null;
