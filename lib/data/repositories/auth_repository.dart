@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+
 import 'package:facelogin/core/constants/app_constants.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/data/models/login_response_model.dart';
@@ -290,11 +290,11 @@ class AuthRepository {
           // Existing user - login flow (Phase 3.4-3.6)
           // This will automatically fall back to registration if server says E2E_NOT_SETUP
           print('🔐 E2E Flow: LOGIN');
-          e2eResult = await _e2eService.bootstrapForLogin(accessToken!);
+          e2eResult = await _e2eService.bootstrapForLogin(accessToken);
         } else {
           // New user - registration flow (Phase 2: E2E Key Bootstrap)
           print('🔐 E2E Flow: REGISTRATION');
-          e2eResult = await _e2eService.bootstrapForRegistration(accessToken!);
+          e2eResult = await _e2eService.bootstrapForRegistration(accessToken);
         }
 
         // CRITICAL: Check if pairing is required (E2E set up on another device)

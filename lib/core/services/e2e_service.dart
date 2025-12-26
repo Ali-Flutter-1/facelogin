@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
-import 'package:cryptography/cryptography.dart' hide PublicKey;
+
 import 'package:cryptography/cryptography.dart' as crypto show PublicKey, KeyPair;
 import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/services/device_service.dart';

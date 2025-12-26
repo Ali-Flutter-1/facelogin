@@ -189,7 +189,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   "Valyd verifies identity,credentials, and responses—instantly—so you can trust every insight and eliminate friction",
                   style: TextStyle(
                     fontFamily: 'OpenSans',
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 0.2,

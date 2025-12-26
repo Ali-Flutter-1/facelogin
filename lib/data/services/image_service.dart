@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+
 import 'package:facelogin/core/constants/app_constants.dart';
 import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/data/models/image_upload_response_model.dart';

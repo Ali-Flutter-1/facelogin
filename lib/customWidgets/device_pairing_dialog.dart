@@ -3,6 +3,7 @@ import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/constants/color_constants.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/customWidgets/custom_button.dart';
+import 'package:facelogin/screens/splash/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -145,8 +146,9 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
       },
       child: Dialog(
         backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: Container(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
@@ -158,39 +160,24 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: ColorConstants.gradientEnd4.withOpacity(0.3),
-              width: 1.5,
+              color: ColorConstants.gradientEnd4.withValues(alpha: 0.4),
+              width: 2,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 20,
-                spreadRadius: 2,
-                offset: const Offset(0, 10),
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 30,
+                spreadRadius: 3,
+                offset: const Offset(0, 15),
               ),
             ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Icon
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: ColorConstants.gradientEnd4.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.devices,
-                  size: 48,
-                  color: ColorConstants.primaryTextColor,
-                ),
-              ),
-              const SizedBox(height: 20),
-
               // Title
               const Text(
-                'Device Pairing Required',
+                'Link Device',
                 style: TextStyle(
                   fontFamily: 'OpenSans',
                   fontSize: 22,
@@ -199,209 +186,149 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 12),
-
-              // Description
-              Text(
-                'E2E encryption is set up on another device.\nScan the QR code or enter the OTP on your existing device.',
-                style: TextStyle(
-                  fontFamily: 'OpenSans',
-                  fontSize: 14,
-                  color: ColorConstants.primaryTextColor.withOpacity(0.8),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
               // QR Code Section (if pairingToken is available)
               if (widget.pairingToken != null && widget.pairingToken!.isNotEmpty) ...[
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: ColorConstants.gradientEnd4.withOpacity(0.5),
+                      color: ColorConstants.gradientEnd4.withValues(alpha: 0.5),
                       width: 2,
                     ),
                   ),
                   child: Column(
                     children: [
-                      const Text(
-                        'Scan this QR code on your existing device:',
-                        style: TextStyle(
-                          fontFamily: 'OpenSans',
-                          fontSize: 14,
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      // Generate URL with pairingToken
                       QrImageView(
                         data: _generatePairingUrl(_currentPairingToken ?? widget.pairingToken!),
                         version: QrVersions.auto,
-                        size: 200.0,
+                        size: 180.0,
                         backgroundColor: Colors.white,
                         errorCorrectionLevel: QrErrorCorrectLevel.M,
                       ),
                       const SizedBox(height: 12),
                       Text(
                         _remainingSeconds > 0
-                            ? 'QR code valid for ${(_remainingSeconds ~/ 60)}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}'
-                            : 'Regenerating QR code...',
+                            ? 'Valid for ${(_remainingSeconds ~/ 60)}:${(_remainingSeconds % 60).toString().padLeft(2, '0')}'
+                            : 'Regenerating...',
                         style: TextStyle(
                           fontFamily: 'OpenSans',
                           fontSize: 12,
-                          color: Colors.black54,
+                          color: _remainingSeconds > 60
+                              ? Colors.green.shade700
+                              : Colors.orange.shade700,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
               ],
 
               // OTP Section
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: ColorConstants.gradientEnd4.withOpacity(0.5),
-                    width: 2,
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: _currentOtp));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('OTP copied!'),
+                      backgroundColor: ColorConstants.gradientEnd4,
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: ColorConstants.gradientEnd4.withValues(alpha: 0.5),
+                      width: 2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _currentOtp,
+                        style: const TextStyle(
+                          fontFamily: 'OpenSans',
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 8,
+                          color: ColorConstants.primaryTextColor,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Icon(
+                        Icons.copy,
+                        color: ColorConstants.primaryTextColor,
+                        size: 20,
+                      ),
+                    ],
                   ),
                 ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Enter this OTP on your existing device:',
-                      style: TextStyle(
-                        fontFamily: 'OpenSans',
-                        fontSize: 14,
-                        color: ColorConstants.primaryTextColor,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    // OTP Display
-                    GestureDetector(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: _currentOtp));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('OTP copied to clipboard!'),
-                            backgroundColor: ColorConstants.gradientEnd4,
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          color: ColorConstants.gradientEnd4.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: ColorConstants.gradientEnd4,
-                            width: 2,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _currentOtp,
-                              style: const TextStyle(
-                                fontFamily: 'OpenSans',
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 8,
-                                color: ColorConstants.primaryTextColor,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Icon(
-                              Icons.copy,
-                              color: ColorConstants.primaryTextColor,
-                              size: 20,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Tap to copy',
-                      style: TextStyle(
-                        fontFamily: 'OpenSans',
-                        fontSize: 12,
-                        color: ColorConstants.primaryTextColor.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
               // Status
-              if (_isPolling && !_isApproved)
-                Column(
-                  children: [
-                    const CircularProgressIndicator(
-                      color: ColorConstants.gradientEnd4,
-                      strokeWidth: 2,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Waiting for approval...',
-                      style: TextStyle(
-                        fontFamily: 'OpenSans',
-                        fontSize: 14,
-                        color: ColorConstants.primaryTextColor.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
+              if (_isPolling && !_isApproved) ...[
+                const SizedBox(height: 12),
+                const CircularProgressIndicator(
+                  color: ColorConstants.gradientEnd4,
+                  strokeWidth: 2,
                 ),
-
-              if (_isApproved)
-                Column(
-                  children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Device paired successfully!',
-                      style: TextStyle(
-                        fontFamily: 'OpenSans',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 12),
+                Text(
+                  'Waiting for approval...',
+                  style: TextStyle(
+                    fontFamily: 'OpenSans',
+                    fontSize: 14,
+                    color: ColorConstants.primaryTextColor.withValues(alpha: 0.8),
+                  ),
                 ),
+              ],
 
-              const SizedBox(height: 20),
+              if (_isApproved) ...[
+                const SizedBox(height: 8),
+                const Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 40,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Device paired!',
+                  style: TextStyle(
+                    fontFamily: 'OpenSans',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 16),
 
               // Cancel Button
               CustomButton(
                 text: 'Cancel',
                 onPressed: () {
                   widget.onCancel?.call();
-                  Navigator.pop(context);
+                  // Navigate to splash screen and clear navigation stack
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const SplashScreen()),
+                    (route) => false,
+                  );
                 },
-                backgroundColor: ColorConstants.gradientEnd4.withOpacity(0.3),
+                backgroundColor: Colors.black.withValues(alpha: 0.3),
                 textColor: ColorConstants.primaryTextColor,
-                height: 48,
+                height: 44,
                 borderRadius: BorderRadius.circular(12),
               ),
             ],

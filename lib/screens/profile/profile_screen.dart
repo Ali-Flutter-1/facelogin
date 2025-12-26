@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:facelogin/components/kyc.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
-import 'package:facelogin/screens/kyc/kyc_screen.dart';
+
 import 'package:facelogin/screens/linkDevice/link_device_screen.dart';
 import 'package:facelogin/screens/pairing/otp_approval_screen.dart';
 import 'package:facelogin/screens/profile/profile_update_screen.dart';
@@ -176,7 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   label,
                   style: TextStyle(
                     fontFamily: 'OpenSans',
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
                     letterSpacing: 0.2,
@@ -466,7 +466,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           _joinedDate ?? '',
                           style: TextStyle(
                             fontFamily: 'OpenSans',
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
                             letterSpacing: 0.1,
@@ -557,7 +557,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                               "Please verify your identity to continue",
                                               style: TextStyle(
                                                 fontFamily: 'OpenSans',
-                                                color: Colors.white.withOpacity(0.8),
+                                                color: Colors.white.withValues(alpha: 0.8),
                                                 fontSize: 15,
                                                 fontWeight: FontWeight.w400,
                                                 letterSpacing: 0.2,
@@ -721,7 +721,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               height: 4,
               margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -762,10 +762,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     width: 1.5,
                   ),
                 ),
@@ -774,7 +774,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF415A77).withOpacity(0.3),
+                        color: const Color(0xFF415A77).withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -803,7 +803,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             style: TextStyle(
                               fontFamily: 'OpenSans',
                               fontSize: 14,
-                              color: Colors.white.withOpacity(0.7),
+                              color: Colors.white.withValues(alpha: 0.7),
                             ),
                           ),
                         ],
@@ -836,10 +836,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     width: 1.5,
                   ),
                 ),
@@ -848,7 +848,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF415A77).withOpacity(0.3),
+                        color: const Color(0xFF415A77).withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -877,7 +877,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             style: TextStyle(
                               fontFamily: 'OpenSans',
                               fontSize: 14,
-                              color: Colors.white.withOpacity(0.7),
+                              color: Colors.white.withValues(alpha: 0.7),
                             ),
                           ),
                         ],

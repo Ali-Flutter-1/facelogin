@@ -420,7 +420,7 @@ Widget _uploadStep({
               borderRadius: BorderRadius.circular(14),
               child: kIsWeb
                   ? FutureBuilder<Uint8List>(
-                future: imageFile?.readAsBytes(),
+                future: imageFile.readAsBytes(),
                 builder: (context, snapshot) {
                   if (snapshot.hasData) {
                     return Image.memory(
@@ -438,7 +438,7 @@ Widget _uploadStep({
                 },
               )
                   : Image.file(
-                File(imageFile!.path),
+                File(imageFile.path),
                 fit: BoxFit.cover,
                 width: double.infinity,
               ),

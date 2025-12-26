@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:facelogin/core/constants/color_constants.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/customWidgets/custom_button.dart';
@@ -7,9 +8,10 @@ import 'package:facelogin/data/models/device_model.dart';
 import 'package:facelogin/data/services/device_service.dart' as device_api;
 import 'package:facelogin/data/services/pairing_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class LinkDeviceScreen extends StatefulWidget {
   const LinkDeviceScreen({Key? key}) : super(key: key);
@@ -199,17 +201,47 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
     await _fetchDevices();
   }
 
-  void _openQRScanner() {
+  Future<void> _openQRScanner() async {
+    // Request camera permission on Android before opening scanner
+    if (Platform.isAndroid) {
+      final status = await Permission.camera.request();
+      if (status.isDenied || status.isPermanentlyDenied) {
+        if (mounted) {
+          showCustomToast(
+            context,
+            'Camera permission is required to scan QR codes. Please enable it in app settings.',
+            isError: true,
+          );
+        }
+        return;
+      }
+    }
+
     // Dispose existing controller if any
     if (_scannerController != null) {
-      _scannerController?.stop();
-      _scannerController?.dispose();
+      try {
+        await _scannerController?.stop();
+      } catch (e) {
+        debugPrint('⚠️ Error stopping scanner: $e');
+      }
+      try {
+        _scannerController?.dispose();
+      } catch (e) {
+        debugPrint('⚠️ Error disposing scanner: $e');
+      }
       _scannerController = null;
+    }
+
+    // Add small delay for Android to ensure permissions are fully granted
+    if (Platform.isAndroid) {
+      await Future.delayed(const Duration(milliseconds: 200));
     }
 
     _scannerController = MobileScannerController(
       detectionSpeed: DetectionSpeed.noDuplicates,
       facing: CameraFacing.back,
+      // Explicitly set QR code format only for Android, iOS works without it
+      formats: Platform.isAndroid ? [BarcodeFormat.qrCode] : [],
     );
 
     showModalBottomSheet(
@@ -649,6 +681,83 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
   String? _pendingCode;
   DateTime? _pendingCodeTime;
   bool _isConfirming = false;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // For Android, start scanner after widget is built
+    // For iOS, let it start automatically
+    if (Platform.isAndroid) {
+      // Wait for the widget to be built, then start the scanner
+      // Use additional delay for Android to ensure the widget is fully rendered
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            _initializeScanner();
+          }
+        });
+      });
+    } else {
+      // iOS works fine with automatic start
+      setState(() {
+        _isInitialized = true;
+      });
+    }
+  }
+
+  Future<void> _initializeScanner() async {
+    if (!Platform.isAndroid) return; // Only for Android
+    
+    try {
+      // Wait longer for Android to ensure MobileScanner widget is fully attached and rendered
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // Try to start the scanner controller with retry logic for Android
+      int retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          await widget.controller.start();
+          debugPrint('📱 Scanner initialized in bottom sheet (Android) - attempt ${retryCount + 1}');
+          
+          // Wait a bit more to ensure camera preview is ready
+          await Future.delayed(const Duration(milliseconds: 200));
+          
+          if (mounted) {
+            setState(() {
+              _isInitialized = true;
+            });
+          }
+          return; // Success, exit retry loop
+        } catch (e) {
+          retryCount++;
+          debugPrint('⚠️ Scanner start attempt $retryCount failed: $e');
+          
+          if (retryCount < maxRetries) {
+            // Wait before retrying
+            await Future.delayed(Duration(milliseconds: 200 * retryCount));
+          } else {
+            // All retries failed
+            debugPrint('❌ Error initializing scanner in bottom sheet after $maxRetries attempts: $e');
+            if (mounted) {
+              setState(() {
+                _isInitialized = false;
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error initializing scanner in bottom sheet: $e');
+      if (mounted) {
+        setState(() {
+          _isInitialized = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -722,13 +831,25 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
           Expanded(
             child: Stack(
               children: [
-                // Wrap MobileScanner to handle disposed controller gracefully
-                Builder(
-                  builder: (context) {
-                    try {
-                      return MobileScanner(
-                        controller: widget.controller,
-                        onDetect: (capture) async {
+                // Show loading if not initialized
+                if (!_isInitialized)
+                  const Center(
+                    child: CircularProgressIndicator(
+                      color: ColorConstants.gradientEnd4,
+                    ),
+                  )
+                else
+                  // Wrap MobileScanner to handle disposed controller gracefully
+                  Builder(
+                    builder: (context) {
+                      try {
+                        return SizedBox.expand(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(0),
+                            child: MobileScanner(
+                              controller: widget.controller,
+                              fit: BoxFit.cover,
+                              onDetect: (capture) async {
                     // Prevent processing if already processing
                     if (_isProcessing) return;
 
@@ -806,15 +927,37 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                     });
                     debugPrint('📱 QR Code detected, waiting 1 second to confirm: $code');
                   },
-                      );
+                            ),
+                          ),
+                        );
                     } catch (e) {
                       debugPrint('⚠️ Error initializing scanner: $e');
-                      return const Center(
-                        child: Text(
-                          'Scanner unavailable',
-                          style: TextStyle(
-                            color: ColorConstants.primaryTextColor,
-                          ),
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: ColorConstants.primaryTextColor,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Scanner unavailable',
+                              style: TextStyle(
+                                color: ColorConstants.primaryTextColor,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ElevatedButton(
+                              onPressed: _initializeScanner,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: ColorConstants.gradientEnd4,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Retry'),
+                            ),
+                          ],
                         ),
                       );
                     }
@@ -866,7 +1009,7 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                                 margin: const EdgeInsets.symmetric(horizontal: 40),
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.5),
+                                  color: Colors.black.withValues(alpha: 0.5),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -877,7 +1020,7 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                                   style: TextStyle(
                                     fontFamily: 'OpenSans',
                                     fontSize: 12,
-                                    color: ColorConstants.primaryTextColor.withOpacity(0.8),
+                                    color: ColorConstants.primaryTextColor.withValues(alpha: 0.8),
                                   ),
                                 ),
                               ),

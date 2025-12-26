@@ -3,11 +3,11 @@ import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/constants/app_constants.dart';
 import 'package:facelogin/core/constants/message_constants.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
-import 'package:facelogin/data/models/image_upload_response_model.dart';
+
 import 'package:facelogin/data/repositories/auth_repository.dart';
 import 'package:facelogin/data/services/image_service.dart';
 import 'package:facelogin/screens/kyc/kyc_screen.dart';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;

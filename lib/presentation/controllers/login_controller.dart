@@ -5,7 +5,7 @@ import 'package:facelogin/data/repositories/auth_repository.dart';
 import 'package:facelogin/presentation/controllers/camera_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
-import 'package:camera/camera.dart';
+
 
 class LoginController extends GetxController {
   final AuthRepository _authRepository;

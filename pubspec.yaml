@@ -53,6 +53,7 @@ dependencies:
   cryptography: ^2.7.0
   mobile_scanner: ^7.1.4
   qr_flutter: ^4.1.0
+  permission_handler: ^11.3.1
 
 
 

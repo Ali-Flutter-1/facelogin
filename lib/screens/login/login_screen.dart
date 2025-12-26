@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+
 import 'dart:io' show Platform;
 
 import 'package:camera/camera.dart';
@@ -18,7 +18,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:facelogin/core/constants/app_constants.dart';
+
 
 class GlassMorphismLoginScreen extends StatefulWidget {
   const GlassMorphismLoginScreen({Key? key}) : super(key: key);
@@ -1374,8 +1374,8 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                         fontFamily: 'OpenSans',
                         fontWeight: FontWeight.w500,
                         color: _faceGuidanceMessage.isNotEmpty
-                            ? Colors.orange.withOpacity(0.9)
-                            : Colors.white.withOpacity(0.8),
+                            ? Colors.orange.withValues(alpha: 0.9)
+                            : Colors.white.withValues(alpha: 0.8),
                         letterSpacing: 0.2,
                         height: 1.5,
                       ),
@@ -1393,7 +1393,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                         fontSize: 13,
                         fontFamily: 'OpenSans',
                         fontWeight: FontWeight.w600,
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                         letterSpacing: 0.1,
                         height: 1.4,
                       ),

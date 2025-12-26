@@ -201,7 +201,7 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: ColorConstants.gradientEnd4.withOpacity(0.2),
+                    color: ColorConstants.gradientEnd4.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -231,7 +231,7 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                   style: TextStyle(
                     fontFamily: 'OpenSans',
                     fontSize: 14,
-                    color: ColorConstants.primaryTextColor.withOpacity(0.8),
+                    color: ColorConstants.primaryTextColor.withValues(alpha: 0.8),
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -241,10 +241,10 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: ColorConstants.gradientEnd4.withOpacity(0.3),
+                      color: ColorConstants.gradientEnd4.withValues(alpha: 0.3),
                       width: 1.5,
                     ),
                   ),
@@ -276,21 +276,21 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                         decoration: InputDecoration(
                           hintText: '000000',
                           hintStyle: TextStyle(
-                            color: ColorConstants.primaryTextColor.withOpacity(0.3),
+                            color: ColorConstants.primaryTextColor.withValues(alpha: 0.3),
                             letterSpacing: 8,
                           ),
                           filled: true,
-                          fillColor: ColorConstants.gradientEnd4.withOpacity(0.1),
+                          fillColor: ColorConstants.gradientEnd4.withValues(alpha: 0.1),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: ColorConstants.gradientEnd4.withOpacity(0.5),
+                              color: ColorConstants.gradientEnd4.withValues(alpha: 0.5),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: ColorConstants.gradientEnd4.withOpacity(0.5),
+                              color: ColorConstants.gradientEnd4.withValues(alpha: 0.5),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -328,7 +328,7 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -336,7 +336,7 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                       Icon(
                         Icons.info_outline,
                         size: 20,
-                        color: ColorConstants.primaryTextColor.withOpacity(0.7),
+                        color: ColorConstants.primaryTextColor.withValues(alpha: 0.7),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -345,7 +345,7 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                           style: TextStyle(
                             fontFamily: 'OpenSans',
                             fontSize: 12,
-                            color: ColorConstants.primaryTextColor.withOpacity(0.7),
+                            color: ColorConstants.primaryTextColor.withValues(alpha: 0.7),
                           ),
                         ),
                       ),

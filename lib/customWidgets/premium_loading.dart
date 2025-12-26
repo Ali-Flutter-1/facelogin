@@ -88,7 +88,7 @@ class PremiumLoadingOverlay extends StatelessWidget {
                   subMessage!,
                   style: TextStyle(
                     fontFamily: 'OpenSans',
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 15,
                     fontWeight: FontWeight.w400,
                     letterSpacing: 0.2,
