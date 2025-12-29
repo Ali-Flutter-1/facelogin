@@ -202,10 +202,11 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
   }
 
   Future<void> _openQRScanner() async {
-    // Request camera permission on Android before opening scanner
+    // Request camera permission on Android only
+    // iOS handles permissions automatically when camera is accessed
     if (Platform.isAndroid) {
       final status = await Permission.camera.request();
-      if (status.isDenied || status.isPermanentlyDenied) {
+      if (!status.isGranted) {
         if (mounted) {
           showCustomToast(
             context,
@@ -232,16 +233,16 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
       _scannerController = null;
     }
 
-    // Add small delay for Android to ensure permissions are fully granted
-    if (Platform.isAndroid) {
-      await Future.delayed(const Duration(milliseconds: 200));
-    }
-
+    // Create new controller
+    // iOS: Keep original behavior (!Platform.isAndroid = true)
+    // Android: Changed to true to fix black screen (was false)
     _scannerController = MobileScannerController(
-      detectionSpeed: DetectionSpeed.noDuplicates,
+      detectionSpeed: Platform.isAndroid
+          ? DetectionSpeed.normal   // allow repeats so your 1-second confirm logic works
+          : DetectionSpeed.noDuplicates,
       facing: CameraFacing.back,
-      // Explicitly set QR code format only for Android, iOS works without it
       formats: Platform.isAndroid ? [BarcodeFormat.qrCode] : [],
+      autoStart: Platform.isAndroid ? true : (!Platform.isAndroid), // iOS: unchanged (true), Android: fixed (true)
     );
 
     showModalBottomSheet(
@@ -681,82 +682,11 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
   String? _pendingCode;
   DateTime? _pendingCodeTime;
   bool _isConfirming = false;
-  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    // For Android, start scanner after widget is built
-    // For iOS, let it start automatically
-    if (Platform.isAndroid) {
-      // Wait for the widget to be built, then start the scanner
-      // Use additional delay for Android to ensure the widget is fully rendered
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) {
-            _initializeScanner();
-          }
-        });
-      });
-    } else {
-      // iOS works fine with automatic start
-      setState(() {
-        _isInitialized = true;
-      });
-    }
-  }
-
-  Future<void> _initializeScanner() async {
-    if (!Platform.isAndroid) return; // Only for Android
-    
-    try {
-      // Wait longer for Android to ensure MobileScanner widget is fully attached and rendered
-      await Future.delayed(const Duration(milliseconds: 300));
-      
-      // Try to start the scanner controller with retry logic for Android
-      int retryCount = 0;
-      const maxRetries = 3;
-      
-      while (retryCount < maxRetries) {
-        try {
-          await widget.controller.start();
-          debugPrint('📱 Scanner initialized in bottom sheet (Android) - attempt ${retryCount + 1}');
-          
-          // Wait a bit more to ensure camera preview is ready
-          await Future.delayed(const Duration(milliseconds: 200));
-          
-          if (mounted) {
-            setState(() {
-              _isInitialized = true;
-            });
-          }
-          return; // Success, exit retry loop
-        } catch (e) {
-          retryCount++;
-          debugPrint('⚠️ Scanner start attempt $retryCount failed: $e');
-          
-          if (retryCount < maxRetries) {
-            // Wait before retrying
-            await Future.delayed(Duration(milliseconds: 200 * retryCount));
-          } else {
-            // All retries failed
-            debugPrint('❌ Error initializing scanner in bottom sheet after $maxRetries attempts: $e');
-            if (mounted) {
-              setState(() {
-                _isInitialized = false;
-              });
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('❌ Error initializing scanner in bottom sheet: $e');
-      if (mounted) {
-        setState(() {
-          _isInitialized = false;
-        });
-      }
-    }
+    // Controller auto-starts, scanner widget handles initialization
   }
 
   @override
@@ -831,25 +761,14 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
           Expanded(
             child: Stack(
               children: [
-                // Show loading if not initialized
-                if (!_isInitialized)
-                  const Center(
-                    child: CircularProgressIndicator(
-                      color: ColorConstants.gradientEnd4,
-                    ),
-                  )
-                else
-                  // Wrap MobileScanner to handle disposed controller gracefully
-                  Builder(
-                    builder: (context) {
-                      try {
-                        return SizedBox.expand(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(0),
-                            child: MobileScanner(
-                              controller: widget.controller,
-                              fit: BoxFit.cover,
-                              onDetect: (capture) async {
+                // MobileScanner widget - always show, let it handle initialization
+                SizedBox.expand(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(0),
+                    child: MobileScanner(
+                      controller: widget.controller,
+                      fit: BoxFit.cover,
+                      onDetect: (capture) async {
                     // Prevent processing if already processing
                     if (_isProcessing) return;
 
@@ -927,41 +846,8 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                     });
                     debugPrint('📱 QR Code detected, waiting 1 second to confirm: $code');
                   },
-                            ),
-                          ),
-                        );
-                    } catch (e) {
-                      debugPrint('⚠️ Error initializing scanner: $e');
-                      return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: ColorConstants.primaryTextColor,
-                              size: 48,
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Scanner unavailable',
-                              style: TextStyle(
-                                color: ColorConstants.primaryTextColor,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed: _initializeScanner,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: ColorConstants.gradientEnd4,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                  },
+                    ),
+                  ),
                 ),
 
                 // Overlay with scanning area
