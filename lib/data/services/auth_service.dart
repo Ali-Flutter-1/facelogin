@@ -18,7 +18,8 @@ class AuthService {
         _imageService = imageService ?? ImageService();
 
   /// Login or register with face image
-  Future<Result<LoginResponseModel>> loginOrRegister(Uint8List faceImageBytes) async {
+  /// [devicePublicKey] - Optional device public key (base64) for iOS reinstall verification
+  Future<Result<LoginResponseModel>> loginOrRegister(Uint8List faceImageBytes, {String? devicePublicKey}) async {
     try {
       // Validate API URL
       if (ApiConstants.loginOrRegister.isEmpty) {
@@ -43,8 +44,12 @@ class AuthService {
       final dataUrl = _imageService.imageToBase64DataUrl(resizedBytes);
       debugPrint("✅ Data URL created (length: ${dataUrl.length})");
 
-      // Create request body
-      final requestBody = {"face_image": dataUrl};
+      // Create request body - include device_public_key if available
+      final Map<String, dynamic> requestBody = {"face_image": dataUrl};
+      if (devicePublicKey != null && devicePublicKey.isNotEmpty) {
+        requestBody["device_public_key"] = devicePublicKey;
+        debugPrint("✅ Including device_public_key in login request");
+      }
       final jsonBody = jsonEncode(requestBody);
       debugPrint("✅ JSON body created (length: ${jsonBody.length})");
 

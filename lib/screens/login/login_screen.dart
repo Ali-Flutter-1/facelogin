@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'dart:io' show Platform;
 
@@ -18,6 +19,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
+import 'package:pointycastle/export.dart' as pc;
 import 'package:shared_preferences/shared_preferences.dart';
 
 
@@ -57,6 +59,61 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
 
   DateTime? _faceDetectionStartTime;
   static const Duration _faceDetectionTimeout = Duration(seconds: 30);
+
+  /// Derive device_public_key from stored SKd (for iOS reinstall verification)
+  Future<String?> _deriveDevicePublicKey() async {
+    try {
+      final skdBase64 = await _storage.read(key: 'e2e_skd');
+      if (skdBase64 == null || skdBase64.isEmpty) {
+        debugPrint('🔐 [LOGIN] No local SKd found - skipping device_public_key');
+        return null;
+      }
+      
+      debugPrint('🔐 [LOGIN] Local SKd exists - deriving device_public_key');
+      final seedBytes = base64Decode(skdBase64);
+      
+      // Reconstruct keypair from seed to get PKd
+      final domainParams = pc.ECCurve_secp256r1();
+      final keyGen = pc.ECKeyGenerator();
+      final keyParams = pc.ECKeyGeneratorParameters(domainParams);
+      final pcSecureRandom = pc.SecureRandom('Fortuna');
+      pcSecureRandom.seed(pc.KeyParameter(seedBytes.length >= 32 
+          ? Uint8List.fromList(seedBytes.sublist(0, 32))
+          : Uint8List.fromList([...seedBytes, ...List.filled(32 - seedBytes.length, 0)])));
+      keyGen.init(pc.ParametersWithRandom(keyParams, pcSecureRandom));
+      final pcKeyPair = keyGen.generateKeyPair();
+      final pcPkd = pcKeyPair.publicKey as pc.ECPublicKey;
+      
+      // Convert public key to bytes (65 bytes uncompressed: 0x04 + x + y)
+      final point = pcPkd.Q!;
+      final xBigInt = point.x!.toBigInteger()!;
+      final yBigInt = point.y!.toBigInteger()!;
+      final xBytes = _bigIntToBytes(xBigInt, 32);
+      final yBytes = _bigIntToBytes(yBigInt, 32);
+      final pkdBytes = Uint8List.fromList([0x04, ...xBytes, ...yBytes]);
+      
+      final pkdBase64 = base64Encode(pkdBytes);
+      debugPrint('🔐 [LOGIN] device_public_key derived successfully');
+      return pkdBase64;
+    } catch (e) {
+      debugPrint('🔐 [LOGIN] Failed to derive device_public_key: $e');
+      return null;
+    }
+  }
+  
+  /// Convert BigInt to fixed-length bytes
+  Uint8List _bigIntToBytes(BigInt bigInt, int length) {
+    final bytes = <int>[];
+    var value = bigInt;
+    while (value > BigInt.zero) {
+      bytes.insert(0, (value & BigInt.from(0xff)).toInt());
+      value = value >> 8;
+    }
+    while (bytes.length < length) {
+      bytes.insert(0, 0);
+    }
+    return Uint8List.fromList(bytes.length > length ? bytes.sublist(bytes.length - length) : bytes);
+  }
 
   @override
   void initState() {
@@ -541,7 +598,14 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
 
       final base64Image = base64Encode(bytes);
       final dataUrl = "data:image/jpeg;base64,$base64Image";
-      final jsonBody = jsonEncode({"face_image": dataUrl});
+      
+      // Create request body with device_public_key if available (iOS reinstall verification)
+      final Map<String, dynamic> requestBody = {"face_image": dataUrl};
+      final devicePublicKey = await _deriveDevicePublicKey();
+      if (devicePublicKey != null) {
+        requestBody["device_public_key"] = devicePublicKey;
+      }
+      final jsonBody = jsonEncode(requestBody);
 
       http.Response response;
       try {
@@ -770,7 +834,14 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
 
       final base64Image = base64Encode(bytes);
       final dataUrl = "data:image/jpeg;base64,$base64Image";
-      final jsonBody = jsonEncode({"face_image": dataUrl});
+      
+      // Create request body with device_public_key if available (iOS reinstall verification)
+      final Map<String, dynamic> requestBodyAndroid = {"face_image": dataUrl};
+      final devicePublicKeyAndroid = await _deriveDevicePublicKey();
+      if (devicePublicKeyAndroid != null) {
+        requestBodyAndroid["device_public_key"] = devicePublicKeyAndroid;
+      }
+      final jsonBody = jsonEncode(requestBodyAndroid);
 
       http.Response response;
       try {

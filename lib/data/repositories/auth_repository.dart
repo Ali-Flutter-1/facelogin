@@ -1,15 +1,28 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:facelogin/core/constants/app_constants.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/data/models/login_response_model.dart';
 import 'package:facelogin/data/services/auth_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:pointycastle/export.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthRepository {
   final AuthService _authService;
   final E2EService _e2eService;
+  final FlutterSecureStorage _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      keyCipherAlgorithm: KeyCipherAlgorithm.RSA_ECB_PKCS1Padding,
+      storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
+    ),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+  );
 
   AuthRepository({
     AuthService? authService,
@@ -17,10 +30,69 @@ class AuthRepository {
   })  : _authService = authService ?? AuthService(),
         _e2eService = e2eService ?? E2EService();
 
+  /// Derive device public key (PKd) from stored private key seed (SKd)
+  /// Returns null if no local SKd exists
+  Future<String?> _deriveDevicePublicKey() async {
+    try {
+      final skdBase64 = await _storage.read(key: 'e2e_skd');
+      if (skdBase64 == null || skdBase64.isEmpty) {
+        debugPrint('🔐 [AUTH] No local SKd found - skipping device_public_key');
+        return null;
+      }
+      
+      debugPrint('🔐 [AUTH] Local SKd exists - deriving device_public_key');
+      final seedBytes = base64Decode(skdBase64);
+      
+      // Reconstruct keypair from seed to get PKd
+      final domainParams = ECCurve_secp256r1();
+      final keyGen = ECKeyGenerator();
+      final keyParams = ECKeyGeneratorParameters(domainParams);
+      final pcSecureRandom = SecureRandom('Fortuna');
+      pcSecureRandom.seed(KeyParameter(seedBytes.length >= 32 
+          ? Uint8List.fromList(seedBytes.sublist(0, 32))
+          : Uint8List.fromList([...seedBytes, ...List.filled(32 - seedBytes.length, 0)])));
+      keyGen.init(ParametersWithRandom(keyParams, pcSecureRandom));
+      final pcKeyPair = keyGen.generateKeyPair();
+      final pcPkd = pcKeyPair.publicKey as ECPublicKey;
+      
+      // Convert public key to bytes (65 bytes uncompressed: 0x04 + x + y)
+      final point = pcPkd.Q!;
+      final xBigInt = point.x!.toBigInteger()!;
+      final yBigInt = point.y!.toBigInteger()!;
+      final xBytes = _bigIntToBytes(xBigInt, 32);
+      final yBytes = _bigIntToBytes(yBigInt, 32);
+      final pkdBytes = Uint8List.fromList([0x04, ...xBytes, ...yBytes]);
+      
+      final pkdBase64 = base64Encode(pkdBytes);
+      debugPrint('🔐 [AUTH] device_public_key derived successfully');
+      return pkdBase64;
+    } catch (e) {
+      debugPrint('🔐 [AUTH] Failed to derive device_public_key: $e');
+      return null;
+    }
+  }
+  
+  /// Convert BigInt to fixed-length bytes
+  Uint8List _bigIntToBytes(BigInt bigInt, int length) {
+    final bytes = <int>[];
+    var value = bigInt;
+    while (value > BigInt.zero) {
+      bytes.insert(0, (value & BigInt.from(0xff)).toInt());
+      value = value >> 8;
+    }
+    while (bytes.length < length) {
+      bytes.insert(0, 0);
+    }
+    return Uint8List.fromList(bytes.length > length ? bytes.sublist(bytes.length - length) : bytes);
+  }
+
   /// Login or register with face image
   /// Automatically handles E2E encryption bootstrap
   Future<AuthResult> loginOrRegister(Uint8List faceImageBytes) async {
-    final result = await _authService.loginOrRegister(faceImageBytes);
+    // Derive device_public_key from local SKd if exists (for iOS reinstall verification)
+    final devicePublicKey = await _deriveDevicePublicKey();
+    
+    final result = await _authService.loginOrRegister(faceImageBytes, devicePublicKey: devicePublicKey);
 
     if (result.isSuccess && result.data != null) {
       try {
