@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart' as crypto show PublicKey, KeyPair;
 import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/services/device_service.dart';
+import 'package:facelogin/core/services/recovery_key_service.dart';
 import 'package:facelogin/data/services/pairing_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -167,21 +168,43 @@ class E2EService {
         ku[i] = kuSecureRandom.nextInt(256);
       }
 
-      // Step 2.4: Encrypt: wrappedKu = Encrypt(Ku, PKd)
+      // Step 2.4a: Generate recovery phrase (frontend)
+      final recoveryPhrase = RecoveryKeyService.generateRecoveryPhrase();
+
+      // Step 2.4b: Generate recovery key from phrase using KDF (frontend)
+      // Recovery key is generated client-side from phrase using KDF with fixed salt
+      // This recovery key is used to encrypt Ku
+
+      // Step 2.4c: Encrypt Ku with device keys (PKd/SKd) for normal device login
       // We use ECDH key exchange to derive shared secret, then AES-GCM to encrypt Ku
       // Use pointycastle for ECDH
-      final wrappedKu = await _encryptKuWithPointycastleKeys(ku, pcPkd, pcSkd);
+      final wrappedKuDevice = await _encryptKuWithPointycastleKeys(ku, pcPkd, pcSkd);
 
-      // Step 2.5: Send: deviceId, PKd, wrappedKu
-      // Step 2.6: Store in Device Keys Table (server-side)
+      // Step 2.4d: Wrap Ku by recovery key (frontend)
+      // Recovery key is generated from phrase using KDF, then used to encrypt Ku
+      final wrappedKuRecovery = RecoveryKeyService.encryptWithRecoveryKey(ku, recoveryPhrase);
+
+      // Step 2.5: Send: deviceId, PKd, wrappedKu, wrappedKuRecovery, recoveryPhrases
+      // Backend will:
+      // 1. Hash the recovery phrase and store the hash (for verification during recovery)
+      // 2. Store wrappedKuRecovery as-is (encrypted with recovery key, generated on frontend)
+      // 3. Store wrappedKu (encrypted with device keys) for normal device login
       // pkdBytes was already extracted above using pointycastle
       final pkdBase64 = base64Encode(pkdBytes);
-      final wrappedKuBase64 = base64Encode(wrappedKu);
+      final wrappedKuDeviceBase64 = base64Encode(wrappedKuDevice);
+      final wrappedKuRecoveryBase64 = base64Encode(wrappedKuRecovery);
+      
+      // Get credentialId if available (for face login)
+      final prefs = await SharedPreferences.getInstance();
+      final credentialId = prefs.getString('credential_id');
       
       final completeRequestBody = jsonEncode({
         'deviceId': deviceId,
         'PKd': pkdBase64,
-        'wrappedKu': wrappedKuBase64,
+        'wrappedKu': wrappedKuDeviceBase64, // Wrapped with device keys (for normal login)
+        'wrappedKuRecovery': wrappedKuRecoveryBase64, // Wrapped with recovery key (frontend generated)
+        'recoveryPhrases': recoveryPhrase, // Recovery phrase - backend will hash and store
+        if (credentialId != null) 'credentialId': credentialId,
       });
       
       print('🔐 E2E Bootstrap Complete Request: POST ${ApiConstants.e2eBootstrapComplete}');
@@ -301,7 +324,8 @@ class E2EService {
         value: base64Encode(ku),
       );
       print('🔐 Ku: Stored in session storage');
-      return E2EBootstrapResult.success(ku);
+      print('🔐 Recovery phrase generated: $recoveryPhrase');
+      return E2EBootstrapResult.success(ku, recoveryPhrase: recoveryPhrase);
 
     } catch (e) {
       return E2EBootstrapResult.error('E2E setup failed: $e');
@@ -404,15 +428,28 @@ class E2EService {
             print('🔐 E2E Recovery: Falling back to registration flow...');
             return await bootstrapForRegistration(accessToken);
             } else {
-            // No local keys and server says not set up - this shouldn't happen in login flow
-            // But handle gracefully
+            // No local keys and server says not set up
+            // This can happen when:
+            // 1. Existing user uninstalled app (keys deleted) - needs pairing
+            // 2. User is truly new - but this is login flow, so likely scenario 1
+            // Since this is bootstrapForLogin (not registration), if user has no keys
+            // and server says not set up, it likely means E2E exists on server but not for this device
+            // This is a pairing scenario (user needs to pair with their account)
             print('🔐 E2E Status: No local keys and server says not set up');
-            return E2EBootstrapResult.error(errorMessage.isNotEmpty ? errorMessage : 'E2E encryption is not set up');
+            print('🔐 E2E Status: This is likely a pairing scenario (existing user, keys deleted)');
+            print('🔐 E2E Status: Returning pairing required instead of error');
+            return E2EBootstrapResult.pairingRequired(
+              'E2E encryption is not set up for this device. Device pairing required. Please scan QR code or enter OTP.'
+            );
           }
         } else {
-          // Other error - return it
-          return E2EBootstrapResult.error(
-            errorMessage.isNotEmpty ? errorMessage : (errorCode.isNotEmpty ? errorCode : 'Bootstrap failed')
+          // Other error - for bootstrapForLogin, most errors mean pairing is needed
+          // This handles Android uninstall scenario where server returns various errors
+          // because device doesn't have E2E setup anymore
+          print('🔐 E2E Status: Other error in login flow - treating as pairing required');
+          print('🔐 E2E Status: Error code: $errorCode, message: $errorMessage');
+          return E2EBootstrapResult.pairingRequired(
+            'Device needs to be paired. Please scan QR code or enter OTP, or use your recovery phrase.'
           );
         }
       }
@@ -567,11 +604,17 @@ class E2EService {
           print('🔐 E2E Status: Pairing pending - waiting for approval');
           return E2EBootstrapResult.pairingRequired('Pairing request pending approval');
         } else {
-          // No SKd and no wrappedKu - try registration
-          print('🔐 E2E Status: No wrappedKu and no local SKd - attempting registration');
-          await _storage.delete(key: _skdKey);
-          await _storage.delete(key: _kuKey);
-          return await bootstrapForRegistration(accessToken);
+          // No SKd and no wrappedKu - this is unexpected in login flow
+          // This can happen when:
+          // 1. Existing user uninstalled app (keys deleted) - needs pairing
+          // 2. Registration incomplete - but this is login flow
+          // Since this is bootstrapForLogin, if user has no keys and server returns 200 with no wrappedKu,
+          // it likely means E2E exists on server but not for this device (pairing scenario)
+          print('🔐 E2E Status: No SKd and no wrappedKu - likely pairing scenario (existing user, keys deleted)');
+          print('🔐 E2E Status: Returning pairing required instead of registration');
+          return E2EBootstrapResult.pairingRequired(
+            'E2E encryption is not set up for this device. Device pairing required. Please scan QR code or enter OTP.'
+          );
         }
       }
 
@@ -1370,6 +1413,220 @@ class E2EService {
       return E2EBootstrapResult.error('Failed to complete pairing: $e');
     }
   }
+
+  /// Recover account using recovery phrase
+  /// 1. User enters recovery phrase (frontend already has it)
+  /// 2. Send to /e2e/recovery with recoveryPhrases
+  /// 3. Backend hashes the phrase and matches with stored hash
+  /// 4. If match, backend returns wrappedKuRecovery (stored as-is from registration)
+  /// 5. Frontend converts recovery phrase to recovery key using same KDF + fixed salt
+  /// 6. Frontend unwraps Ku from wrappedKuRecovery using recovery key
+  /// 7. Generate new device public and private keys (SKd, PKd)
+  /// 8. Wrap Ku again with new device keys → new wrappedKu
+  /// 9. Store new SKd on device
+  /// 10. Send to /e2e/bootstrap/complete with new device keys only
+  ///     - PKd (new device public key)
+  ///     - wrappedKu (wrapped with new device keys)
+  ///     - NO recoveryPhrases (backend already has hash)
+  ///     - NO wrappedKuRecovery (backend already has it from registration)
+  /// 11. Return success (same recovery phrase continues to work)
+  Future<E2EBootstrapResult> recoverWithPhrase(String recoveryPhrase, String accessToken) async {
+    try {
+      print('🔐 Recovery: Starting recovery flow with phrase');
+      
+      // Step 1: Validate recovery phrase format
+      if (!RecoveryKeyService.isValidRecoveryPhrase(recoveryPhrase)) {
+        return E2EBootstrapResult.error('Invalid recovery phrase format. Please enter 12 valid words.');
+      }
+
+      // Step 2: Send to /e2e/recovery with recoveryPhrases
+      // Backend will:
+      // 1. Hash the recovery phrase
+      // 2. Match with stored hash (from registration)
+      // 3. If match, return wrappedKuRecovery (stored as-is from registration)
+      // Frontend already has the recovery phrase, will convert to recovery key and unwrap
+      final requestBody = jsonEncode({
+        'recoveryPhrases': recoveryPhrase,
+      });
+      
+      print('🔐 Recovery Request: POST ${ApiConstants.e2eRecovery}');
+      print('🔐 Recovery Request Body: $requestBody');
+      
+      final recoveryResponse = await _client.post(
+        Uri.parse(ApiConstants.e2eRecovery),
+        headers: {
+          'Content-Type': ApiConstants.contentTypeJson,
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: requestBody,
+      ).timeout(const Duration(seconds: 30));
+
+      print('🔐 Recovery Response Status: ${recoveryResponse.statusCode}');
+      print('🔐 Recovery Response Body: ${recoveryResponse.body}');
+
+      if (recoveryResponse.statusCode != 200) {
+        Map<String, dynamic> errorData;
+        try {
+          errorData = jsonDecode(recoveryResponse.body) as Map<String, dynamic>;
+        } catch (e) {
+          return E2EBootstrapResult.error('Failed to parse recovery response');
+        }
+        
+        final error = errorData['error'];
+        String errorMessage = 'Recovery failed';
+        if (error != null && error is Map) {
+          errorMessage = error['message']?.toString() ?? error['code']?.toString() ?? errorMessage;
+        } else if (error is String) {
+          errorMessage = error;
+        }
+        return E2EBootstrapResult.error(errorMessage);
+      }
+
+      // Step 3: Parse response - handle both direct and nested data structures
+      Map<String, dynamic> recoveryData;
+      try {
+        final responseBody = jsonDecode(recoveryResponse.body);
+        if (responseBody is Map<String, dynamic>) {
+          // Check if response has nested 'data' field
+          if (responseBody.containsKey('data') && responseBody['data'] is Map) {
+            recoveryData = responseBody['data'] as Map<String, dynamic>;
+          } else {
+            // Direct response
+            recoveryData = responseBody;
+          }
+        } else {
+          return E2EBootstrapResult.error('Invalid recovery response format: expected JSON object');
+        }
+      } catch (e) {
+        print('🔐 Recovery: Failed to parse response: $e');
+        print('🔐 Recovery: Response body: ${recoveryResponse.body}');
+        return E2EBootstrapResult.error('Failed to parse recovery response: $e');
+      }
+
+      // Backend returns only wrappedKuRecovery (stored as-is from registration)
+      // Backend matched the hash and returned the stored wrappedKuRecovery
+      final wrappedKuRecoveryBase64 = recoveryData['wrappedKuRecovery'] ?? recoveryData['wrappedKu'];
+
+      print('🔐 Recovery: Response fields - wrappedKuRecovery: ${wrappedKuRecoveryBase64 != null ? "present" : "missing"}');
+      print('🔐 Recovery: Response keys: ${recoveryData.keys.toList()}');
+
+      if (wrappedKuRecoveryBase64 == null) {
+        return E2EBootstrapResult.error('Invalid recovery response: missing wrappedKuRecovery. Response: ${recoveryResponse.body}');
+      }
+
+      // Get deviceId from device service (not from recovery response)
+      final deviceId = await _deviceService.getDeviceId();
+      print('🔐 Recovery: Using device ID from device service: $deviceId');
+
+      // Step 4: Frontend converts recovery phrase to recovery key using same KDF + fixed salt
+      // Step 5: Frontend unwraps Ku from wrappedKuRecovery using recovery key
+      final wrappedKuRecovery = base64Decode(wrappedKuRecoveryBase64);
+      final ku = RecoveryKeyService.decryptWithRecoveryKey(wrappedKuRecovery, recoveryPhrase);
+      
+      print('🔐 Recovery: Successfully decrypted Ku');
+
+      // Step 6: Generate new device public and private keys (SKd, PKd)
+      // After recovery, we need new device keys for security
+      final domainParams = ECCurve_secp256r1();
+      
+      // Generate new random seed for P-256 private key
+      final seed = Uint8List(32);
+      final secureRandom = Random.secure();
+      for (int i = 0; i < 32; i++) {
+        seed[i] = secureRandom.nextInt(256);
+      }
+      
+      // Create new keypair from seed
+      final keyGen = ECKeyGenerator();
+      final keyParams = ECKeyGeneratorParameters(domainParams);
+      final pcSecureRandom = pc.SecureRandom('Fortuna');
+      pcSecureRandom.seed(KeyParameter(seed));
+      keyGen.init(ParametersWithRandom(keyParams, pcSecureRandom));
+      final pcKeyPair = keyGen.generateKeyPair();
+      final pcPkd = pcKeyPair.publicKey as ECPublicKey;
+      final pcSkd = pcKeyPair.privateKey as ECPrivateKey;
+      
+      final pkdBytes = _ecPublicKeyToBytes(pcPkd);
+
+      // Step 7: Wrap Ku again with new device keys (PKd/SKd)
+      final newWrappedKuDevice = await _encryptKuWithPointycastleKeys(ku, pcPkd, pcSkd);
+
+      // Step 8: Send to /e2e/bootstrap/complete with new device keys only
+      // IMPORTANT: 
+      // - wrappedKuRecovery already exists on backend from registration (NOT sent)
+      // - recoveryPhrases NOT sent (backend already has the hash)
+      // - Only send new device keys (PKd, wrappedKu with new device keys)
+      // IMPORTANT: Store keys ONLY after bootstrap/complete succeeds
+      final pkdBase64 = base64Encode(pkdBytes);
+      final wrappedKuDeviceBase64New = base64Encode(newWrappedKuDevice);
+      
+      // Get credentialId if available (for face login)
+      final prefs = await SharedPreferences.getInstance();
+      final credentialId = prefs.getString('credential_id');
+      
+      final completeRequestBody = jsonEncode({
+        'deviceId': deviceId,
+        'PKd': pkdBase64, // New device public key
+        'wrappedKu': wrappedKuDeviceBase64New, // Wrapped with new device keys (for normal login)
+        // wrappedKuRecovery NOT sent - backend already has it from registration
+        // recoveryPhrases NOT sent - backend already has the hash
+        if (credentialId != null) 'credentialId': credentialId,
+      });
+      
+      print('🔐 Recovery Bootstrap Complete Request: POST ${ApiConstants.e2eBootstrapComplete}');
+      print('🔐 Recovery Bootstrap Complete Request Body: $completeRequestBody');
+      
+      final completeResponse = await _client.post(
+        Uri.parse(ApiConstants.e2eBootstrapComplete),
+        headers: {
+          'Content-Type': ApiConstants.contentTypeJson,
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: completeRequestBody,
+      ).timeout(const Duration(seconds: 30));
+
+      print('🔐 Recovery Bootstrap Complete Response Status: ${completeResponse.statusCode}');
+      print('🔐 Recovery Bootstrap Complete Response Body: ${completeResponse.body}');
+
+      if (completeResponse.statusCode != 200 && completeResponse.statusCode != 201) {
+        Map<String, dynamic> errorData;
+        try {
+          errorData = jsonDecode(completeResponse.body) as Map<String, dynamic>;
+        } catch (e) {
+          return E2EBootstrapResult.error('Failed to parse bootstrap complete response');
+        }
+        
+        final error = errorData['error'];
+        String errorMessage = 'Bootstrap complete failed';
+        if (error != null && error is Map) {
+          errorMessage = error['message']?.toString() ?? error['code']?.toString() ?? errorMessage;
+        } else if (error is String) {
+          errorMessage = error;
+        }
+        // Don't store keys if bootstrap/complete failed
+        return E2EBootstrapResult.error(errorMessage);
+      }
+
+      // Step 9: Store keys ONLY after bootstrap/complete succeeds
+      final skdBase64 = base64Encode(seed);
+      await _storage.write(key: _skdKey, value: skdBase64);
+      print('🔐 Recovery: Stored new SKd');
+
+      // Step 10: Store Ku in session
+      await _storage.write(key: _kuKey, value: base64Encode(ku));
+      print('🔐 Recovery: Stored Ku in session');
+
+      print('🔐 Recovery: Successfully completed recovery');
+      print('🔐 Recovery: New device keys generated and stored');
+      print('🔐 Recovery: Same recovery phrase continues to work (wrappedKuRecovery unchanged on backend)');
+      
+      return E2EBootstrapResult.success(ku);
+
+    } catch (e) {
+      print('🔐 Recovery Error: $e');
+      return E2EBootstrapResult.error('Recovery failed: $e');
+    }
+  }
 }
 
 /// Result class for E2E bootstrap operations
@@ -1377,18 +1634,21 @@ class E2EBootstrapResult {
   final Uint8List? ku;
   final String? error;
   final bool requiresPairing;
+  final String? recoveryPhrase;
 
-  E2EBootstrapResult.success(this.ku) 
+  E2EBootstrapResult.success(this.ku, {this.recoveryPhrase}) 
       : error = null, 
         requiresPairing = false;
   
   E2EBootstrapResult.error(this.error) 
       : ku = null, 
-        requiresPairing = false;
+        requiresPairing = false,
+        recoveryPhrase = null;
   
   E2EBootstrapResult.pairingRequired(this.error)
       : ku = null,
-        requiresPairing = true;
+        requiresPairing = true,
+        recoveryPhrase = null;
 
   bool get isSuccess => ku != null;
   bool get needsPairing => requiresPairing;

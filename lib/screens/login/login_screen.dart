@@ -8,6 +8,7 @@ import 'package:facelogin/constant/constant.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/customWidgets/device_pairing_dialog.dart';
 import 'package:facelogin/screens/profile/profile_screen.dart';
+import 'package:facelogin/screens/recovery/recovery_phrase_dialog.dart';
 import 'package:facelogin/data/repositories/auth_repository.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:flutter/foundation.dart';
@@ -641,15 +642,37 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             return;
           }
           
-          // Success - navigate to profile
-          showCustomToast(context, "Face login successful!");
-          await Future.delayed(const Duration(milliseconds: 500));
+          // Success - check if recovery phrase needs to be shown (registration)
+          if (authResult.recoveryPhrase != null && authResult.recoveryPhrase!.isNotEmpty) {
+            // Show recovery phrase dialog for new registration
+            if (!mounted) return;
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (dialogContext) => RecoveryPhraseDialog(
+                recoveryPhrase: authResult.recoveryPhrase!,
+                onContinue: () {
+                  Navigator.pop(dialogContext);
+                  if (mounted) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                    );
+                  }
+                },
+              ),
+            );
+          } else {
+            // Normal login - navigate directly
+            showCustomToast(context, "Face login successful!");
+            await Future.delayed(const Duration(milliseconds: 500));
 
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ProfileScreen()),
-          );
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            );
+          }
           return;
         }
 
@@ -848,15 +871,37 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             return;
           }
           
-          // Success - navigate to profile
-          showCustomToast(context, "Face login successful!");
-          await Future.delayed(const Duration(milliseconds: 500));
+          // Success - check if recovery phrase needs to be shown (registration)
+          if (authResult.recoveryPhrase != null && authResult.recoveryPhrase!.isNotEmpty) {
+            // Show recovery phrase dialog for new registration
+            if (!mounted) return;
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (dialogContext) => RecoveryPhraseDialog(
+                recoveryPhrase: authResult.recoveryPhrase!,
+                onContinue: () {
+                  Navigator.pop(dialogContext);
+                  if (mounted) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                    );
+                  }
+                },
+              ),
+            );
+          } else {
+            // Normal login - navigate directly
+            showCustomToast(context, "Face login successful!");
+            await Future.delayed(const Duration(milliseconds: 500));
 
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ProfileScreen()),
-          );
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            );
+          }
           return;
         }
 

@@ -17,7 +17,9 @@ import '../../customWidgets/premium_loading.dart';
 import '../login/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  final bool fromRecovery;
+  
+  const ProfileScreen({Key? key, this.fromRecovery = false}) : super(key: key);
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -58,7 +60,17 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
     _controller.forward();
 
-    _fetchProfile();
+    // Add delay if coming from recovery to ensure everything is synced
+    if (widget.fromRecovery) {
+      debugPrint('📱 ProfileScreen: Coming from recovery - adding delay before fetch');
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _fetchProfile();
+        }
+      });
+    } else {
+      _fetchProfile();
+    }
   }
 
   @override
@@ -209,6 +221,18 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (token == null) {
       debugPrint("ProfileScreen: No access token found");
+      // If coming from recovery, don't redirect - just show error
+      if (widget.fromRecovery) {
+        debugPrint("ProfileScreen: Coming from recovery - not redirecting, will retry");
+        if (mounted) {
+          showCustomToast(context, "Loading profile...", isError: false);
+          // Retry after a short delay
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) _fetchProfile();
+          });
+        }
+        return;
+      }
       if (mounted) {
         showCustomToast(context, "No access token found.", isError: true);
         Navigator.pushAndRemoveUntil(
@@ -275,6 +299,19 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
       } else if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
         debugPrint("ProfileScreen: Access token invalid, expired, or user deleted - Status: ${response.statusCode}");
+
+        // If coming from recovery, don't redirect immediately - might be a temporary issue
+        if (widget.fromRecovery) {
+          debugPrint("ProfileScreen: Coming from recovery - not redirecting on ${response.statusCode}, will retry");
+          if (mounted) {
+            showCustomToast(context, "Setting up profile...", isError: false);
+            // Retry after a short delay - recovery might need time to sync
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) _fetchProfile();
+            });
+          }
+          return;
+        }
 
         // Check if user is deleted (404) or unauthorized (401/403)
         String errorMessage = "Session expired. Please log in again.";

@@ -42,7 +42,7 @@ class _SplashScreenState extends State<SplashScreen> {
           debugPrint('🔐 [SPLASH] E2E Keys Check - SKd: $hasE2EKeys, Ku: $hasSessionKu');
 
           if (hasE2EKeys && hasSessionKu) {
-            // Both keys present - verify device owner matches
+            // Both keys present - verify device owner matches and check if pairing is needed
             try {
               // Extract user ID from token
               final parts = accessToken.split('.');
@@ -69,13 +69,51 @@ class _SplashScreenState extends State<SplashScreen> {
                     );
                     return;
                   }
+                  
+                  // Verify with server that pairing/recovery is not needed
+                  // Call bootstrap to check if device needs pairing
+                  final bootstrapResult = await e2eService.bootstrapForLogin(accessToken);
+                  
+                  if (bootstrapResult.needsPairing) {
+                    // Device needs pairing - clear session and force login flow
+                    debugPrint('🔐 [SPLASH] Device needs pairing - forcing login flow');
+                    await _secureStorage.delete(key: 'e2e_ku_session'); // Clear session key
+                    // Keep tokens but clear session - login will handle pairing
+                    if (!mounted) return;
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
+                    );
+                    return;
+                  }
+                  
+                  if (!bootstrapResult.isSuccess) {
+                    // Bootstrap failed - might need recovery, force login
+                    debugPrint('🔐 [SPLASH] Bootstrap check failed - forcing login flow');
+                    await _secureStorage.delete(key: 'e2e_ku_session');
+                    if (!mounted) return;
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
+                    );
+                    return;
+                  }
                 }
               }
             } catch (e) {
-              debugPrint('🔐 [SPLASH] Error checking device owner: $e');
+              debugPrint('🔐 [SPLASH] Error checking device status: $e');
+              // On error, force login to be safe
+              await _secureStorage.delete(key: 'e2e_ku_session');
+              if (!mounted) return;
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
+              );
+              return;
             }
             
-            // Both keys present and device owner matches - safe to navigate to profile
+            // Both keys present, device owner matches, and server confirms no pairing needed
+            // Safe to navigate to profile
             if (!mounted) return;
             Navigator.pushReplacement(
               context,

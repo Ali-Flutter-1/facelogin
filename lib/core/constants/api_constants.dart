@@ -8,6 +8,7 @@ class ApiConstants {
   // E2E Encryption endpoints
   static const String e2eBootstrap = '$baseUrl/e2e/bootstrap';
   static const String e2eBootstrapComplete = '$baseUrl/e2e/bootstrap/complete';
+  static const String e2eRecovery = '$baseUrl/e2e/recovery';
 
 
   // Link Devices endpoints

@@ -3,6 +3,7 @@ import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/constants/color_constants.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/customWidgets/custom_button.dart';
+import 'package:facelogin/screens/recovery/recovery_screen.dart';
 import 'package:facelogin/screens/splash/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -315,16 +316,45 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
 
               const SizedBox(height: 16),
 
+              // Recovery Account Button
+              CustomButton(
+                text: 'Recover Account',
+                onPressed: () {
+                  Navigator.pop(context); // Close pairing dialog
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const RecoveryScreen()),
+                  );
+                },
+                backgroundColor: ColorConstants.gradientEnd4.withValues(alpha: 0.3),
+                textColor: ColorConstants.primaryTextColor,
+                height: 44,
+                borderRadius: BorderRadius.circular(12),
+                image: const Icon(
+                  Icons.lock_reset,
+                  size: 20,
+                  color: ColorConstants.primaryTextColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+
               // Cancel Button
               CustomButton(
                 text: 'Cancel',
-                onPressed: () {
+                onPressed: () async {
                   widget.onCancel?.call();
-                  // Navigate to splash screen and clear navigation stack
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const SplashScreen()),
-                    (route) => false,
-                  );
+                  // Close dialog first
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  // Wait a bit for dialog to close, then navigate to splash screen
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const SplashScreen()),
+                      (route) => false,
+                    );
+                  }
                 },
                 backgroundColor: Colors.black.withValues(alpha: 0.3),
                 textColor: ColorConstants.primaryTextColor,

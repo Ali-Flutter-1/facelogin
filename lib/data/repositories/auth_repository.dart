@@ -112,14 +112,28 @@ class AuthRepository {
           // Handle boolean values that might come as strings or booleans
           final isNewUserValue = loginData['is_new_user'];
           final pairingRequiredValue = loginData['pairingRequired'];
+          final isPublicKeyMatchedValue = loginData['is_public_key_matched'];
           
           debugPrint('🔗 [AUTH] Raw is_new_user value: $isNewUserValue (type: ${isNewUserValue.runtimeType})');
           debugPrint('🔗 [AUTH] Raw pairingRequired value: $pairingRequiredValue (type: ${pairingRequiredValue.runtimeType})');
+          debugPrint('🔗 [AUTH] Raw is_public_key_matched value: $isPublicKeyMatchedValue (type: ${isPublicKeyMatchedValue.runtimeType})');
           final e2eStatus = loginData['e2e_status']?.toString();
           final e2eReason = loginData['e2e_reason']?.toString();
           final e2eScenario = loginData['e2e_scenario']?.toString();
           final e2eMessage = loginData['e2e_message']?.toString();
           final pairingOtp = loginData['pairingOtp']?.toString();
+          
+          // Check is_public_key_matched FIRST - if false, pairing is required
+          bool? isPublicKeyMatched;
+          if (isPublicKeyMatchedValue is bool) {
+            isPublicKeyMatched = isPublicKeyMatchedValue;
+          } else if (isPublicKeyMatchedValue is String) {
+            isPublicKeyMatched = isPublicKeyMatchedValue.toLowerCase() == 'true';
+          } else if (isPublicKeyMatchedValue != null) {
+            isPublicKeyMatched = isPublicKeyMatchedValue.toString().toLowerCase() == 'true';
+          }
+          
+          debugPrint('🔗 [AUTH] Parsed is_public_key_matched: $isPublicKeyMatched (from raw: $isPublicKeyMatchedValue)');
           
           // Convert to boolean (handle both bool and string "true"/"false")
           bool? isNewUser;
@@ -143,19 +157,35 @@ class AuthRepository {
           
           debugPrint('🔗 [AUTH] Login response - is_new_user: $isNewUser (raw: $isNewUserValue)');
           debugPrint('🔗 [AUTH] Login response - pairingRequired: $pairingRequired (raw: $pairingRequiredValue)');
+          debugPrint('🔗 [AUTH] Login response - is_public_key_matched: $isPublicKeyMatched');
           debugPrint('🔗 [AUTH] Login response - e2e_status: $e2eStatus');
           debugPrint('🔗 [AUTH] Login response - e2e_reason: $e2eReason');
           debugPrint('🔗 [AUTH] Login response - e2e_scenario: $e2eScenario');
           debugPrint('🔗 [AUTH] Login response - pairingOtp: $pairingOtp');
           
-          // Check if pairing is required: existing user (is_new_user=false) AND 
-          // (e2e_reason="NEW_DEVICE_NEEDS_PAIRING" OR e2e_scenario="EXISTING_USER_NEEDS_PAIRING")
-          final needsPairing = (isNewUser == false && 
-              (e2eReason == 'NEW_DEVICE_NEEDS_PAIRING' || 
-               e2eScenario == 'EXISTING_USER_NEEDS_PAIRING'));
+          // Check if pairing is required: 
+          // 1. Existing user (is_new_user=false) AND public key mismatch (is_public_key_matched=false)
+          //    - This handles Android uninstall (keys deleted) or new device
+          //    - iOS with persisted keys will have is_public_key_matched=true, so no pairing needed
+          // 2. Explicit pairing signals from backend (e2e_reason or e2e_scenario)
+          // 
+          // IMPORTANT: If local keys exist (iOS Keychain persists after reinstall), 
+          // skip early pairing and let bootstrap verify the keys
+          final hasLocalKeys = await _e2eService.hasE2EKeys();
+          debugPrint('🔗 [AUTH] Local E2E keys exist: $hasLocalKeys');
+          
+          // If local keys exist, skip pairing check - let bootstrap handle verification
+          // This fixes iOS reinstall scenario where Keychain keys persist
+          bool needsPairing = false;
+          if (!hasLocalKeys) {
+            // No local keys - check backend signals for pairing
+            needsPairing = ((isNewUser == false && isPublicKeyMatched == false) ||
+                            e2eReason == 'NEW_DEVICE_NEEDS_PAIRING' || 
+                            e2eScenario == 'EXISTING_USER_NEEDS_PAIRING');
+          }
           
           debugPrint('🔗 [AUTH] Needs pairing check: $needsPairing');
-          debugPrint('🔗 [AUTH] Condition: is_new_user=$isNewUser, e2e_reason=$e2eReason, e2e_scenario=$e2eScenario');
+          debugPrint('🔗 [AUTH] Condition: hasLocalKeys=$hasLocalKeys, is_new_user=$isNewUser, is_public_key_matched=$isPublicKeyMatched, e2e_reason=$e2eReason, e2e_scenario=$e2eScenario');
           
           if (needsPairing) {
             // CRITICAL: Check device owner BEFORE allowing pairing
@@ -229,6 +259,7 @@ class AuthRepository {
         if (loginDataRecheck != null && loginDataRecheck is Map<String, dynamic>) {
           final isNewUserRecheck = loginDataRecheck['is_new_user'];
           final pairingRequiredRecheck = loginDataRecheck['pairingRequired'];
+          final isPublicKeyMatchedRecheck = loginDataRecheck['is_public_key_matched'];
           
           bool? isNewUserBool;
           if (isNewUserRecheck is bool) {
@@ -249,14 +280,54 @@ class AuthRepository {
             pairingRequiredBool = pairingRequiredRecheck.toLowerCase() == 'true';
           }
           
+          // Re-check is_public_key_matched
+          bool? isPublicKeyMatchedBool;
+          if (isPublicKeyMatchedRecheck is bool) {
+            isPublicKeyMatchedBool = isPublicKeyMatchedRecheck;
+          } else if (isPublicKeyMatchedRecheck is String) {
+            isPublicKeyMatchedBool = isPublicKeyMatchedRecheck.toLowerCase() == 'true';
+          } else if (isPublicKeyMatchedRecheck != null) {
+            isPublicKeyMatchedBool = isPublicKeyMatchedRecheck.toString().toLowerCase() == 'true';
+          }
+          
+          debugPrint('🔗 [AUTH] Re-check parsed is_public_key_matched: $isPublicKeyMatchedBool (from raw: $isPublicKeyMatchedRecheck)');
+          
+          // Re-check: If public key doesn't match, pairing is required
+          if (isPublicKeyMatchedBool == false) {
+            debugPrint('🔗 [AUTH] ⚠️ Public key mismatch detected in RE-CHECK! Blocking direct login.');
+            // CRITICAL: Check device owner BEFORE allowing pairing in re-check
+            if (currentUserId != null) {
+              final existingOwnerRecheck = await _e2eService.getDeviceOwnerUserId();
+              if (existingOwnerRecheck != null && existingOwnerRecheck != currentUserId) {
+                debugPrint('🔐 [AUTH] ⚠️ SECURITY: Different user trying to pair (re-check, public key mismatch) - BLOCKING');
+                debugPrint('🔐 [AUTH] Device owner: $existingOwnerRecheck, Attempting user: $currentUserId');
+                return AuthResult.error(
+                  'This device is already registered to another account.\n\n'
+                  'Please use a different device'
+                );
+              }
+            }
+            final e2eMessageRecheck = loginDataRecheck['e2e_message']?.toString();
+            return AuthResult.pairingRequired(
+              e2eMessageRecheck ?? 'Public key mismatch. Device pairing required. Please scan QR code or enter OTP.'
+            );
+          }
+          
           final e2eReasonRecheck = loginDataRecheck['e2e_reason']?.toString();
           final e2eScenarioRecheck = loginDataRecheck['e2e_scenario']?.toString();
           final e2eMessageRecheck = loginDataRecheck['e2e_message']?.toString();
           
-          // Re-check: existing user (is_new_user=false) AND needs pairing
-          final needsPairingRecheck = (isNewUserBool == false && 
-              (e2eReasonRecheck == 'NEW_DEVICE_NEEDS_PAIRING' || 
-               e2eScenarioRecheck == 'EXISTING_USER_NEEDS_PAIRING'));
+          // Re-check: existing user with public key mismatch OR explicit pairing signals
+          // Same logic as initial check - if local keys exist, skip pairing (iOS fix)
+          final hasLocalKeysRecheck = await _e2eService.hasE2EKeys();
+          bool needsPairingRecheck = false;
+          if (!hasLocalKeysRecheck) {
+            needsPairingRecheck = ((isNewUserBool == false && isPublicKeyMatchedBool == false) ||
+                                   e2eReasonRecheck == 'NEW_DEVICE_NEEDS_PAIRING' || 
+                                   e2eScenarioRecheck == 'EXISTING_USER_NEEDS_PAIRING');
+          }
+          
+          debugPrint('🔗 [AUTH] Re-check: hasLocalKeys=$hasLocalKeysRecheck, needsPairing=$needsPairingRecheck');
           
           if (needsPairingRecheck) {
             // CRITICAL: Check device owner BEFORE allowing pairing in re-check
@@ -280,21 +351,56 @@ class AuthRepository {
         }
 
         // E2E Encryption Bootstrap
-        // Check if this is a new user (registration) or existing user (login)
+        // CRITICAL: Check isNewUser from login response FIRST to determine flow
+        // This prevents showing recovery phrase on new devices for existing users
         print('🔐 E2E Setup: Starting...');
         final hasExistingKeys = await _e2eService.hasE2EKeys();
         print('🔐 E2E Keys Present: $hasExistingKeys');
         
+        // Get isNewUser from login response to determine if this is registration or pairing
+        bool? isNewUserFromResponse;
+        final loginDataForBootstrap = result.data!.data;
+        if (loginDataForBootstrap != null && loginDataForBootstrap is Map<String, dynamic>) {
+          final isNewUserValue = loginDataForBootstrap['is_new_user'];
+          if (isNewUserValue is bool) {
+            isNewUserFromResponse = isNewUserValue;
+          } else if (isNewUserValue is String) {
+            isNewUserFromResponse = isNewUserValue.toLowerCase() == 'true';
+          } else if (isNewUserValue != null) {
+            isNewUserFromResponse = isNewUserValue.toString().toLowerCase() == 'true';
+          }
+        }
+        
+        debugPrint('🔐 [AUTH] E2E Bootstrap Decision - isNewUser: $isNewUserFromResponse, hasExistingKeys: $hasExistingKeys');
+        
         E2EBootstrapResult e2eResult;
-        if (hasExistingKeys) {
-          // Existing user - login flow (Phase 3.4-3.6)
-          // This will automatically fall back to registration if server says E2E_NOT_SETUP
-          print('🔐 E2E Flow: LOGIN');
+        
+        // Decision logic:
+        // 1. If isNewUser == false (existing user), always use bootstrapForLogin (will detect pairing if needed)
+        // 2. If isNewUser == true (new user), use bootstrapForRegistration
+        // 3. If isNewUser is unknown, fall back to checking local keys
+        if (isNewUserFromResponse == false) {
+          // Existing user on new device - use login flow (will detect pairing requirement)
+          // This prevents generating new recovery phrase for existing users
+          print('🔐 E2E Flow: LOGIN (existing user, may need pairing)');
+          debugPrint('🔐 [AUTH] Existing user detected - using login flow to prevent duplicate recovery phrase');
           e2eResult = await _e2eService.bootstrapForLogin(accessToken);
-        } else {
+        } else if (isNewUserFromResponse == true) {
           // New user - registration flow (Phase 2: E2E Key Bootstrap)
-          print('🔐 E2E Flow: REGISTRATION');
+          print('🔐 E2E Flow: REGISTRATION (new user)');
           e2eResult = await _e2eService.bootstrapForRegistration(accessToken);
+        } else {
+          // isNewUser is unknown - fall back to checking local keys
+          if (hasExistingKeys) {
+            // Existing user - login flow (Phase 3.4-3.6)
+            // This will automatically fall back to registration if server says E2E_NOT_SETUP
+            print('🔐 E2E Flow: LOGIN (fallback - local keys exist)');
+            e2eResult = await _e2eService.bootstrapForLogin(accessToken);
+          } else {
+            // New user - registration flow (Phase 2: E2E Key Bootstrap)
+            print('🔐 E2E Flow: REGISTRATION (fallback - no local keys)');
+            e2eResult = await _e2eService.bootstrapForRegistration(accessToken);
+          }
         }
 
         // CRITICAL: Check if pairing is required (E2E set up on another device)
@@ -391,7 +497,8 @@ class AuthRepository {
           }
         }
 
-        return AuthResult.success(result.data!);
+        // Return success with recovery phrase if available (from registration)
+        return AuthResult.success(result.data!, recoveryPhrase: e2eResult.recoveryPhrase);
       } catch (e) {
         debugPrint('❌ Error in loginOrRegister: $e');
         return AuthResult.error(
@@ -445,18 +552,21 @@ class AuthResult {
   final LoginResponseModel? data;
   final String? error;
   final bool requiresPairing;
+  final String? recoveryPhrase;
 
-  AuthResult.success(this.data) 
+  AuthResult.success(this.data, {this.recoveryPhrase}) 
       : error = null, 
         requiresPairing = false;
   
   AuthResult.error(this.error) 
       : data = null, 
-        requiresPairing = false;
+        requiresPairing = false,
+        recoveryPhrase = null;
   
   AuthResult.pairingRequired(this.error)
       : data = null,
-        requiresPairing = true;
+        requiresPairing = true,
+        recoveryPhrase = null;
 
   bool get isSuccess => data != null;
   bool get isError => error != null;
