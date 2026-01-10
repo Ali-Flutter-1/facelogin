@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/constants/app_constants.dart';
 import 'package:facelogin/core/services/device_service.dart' as device_id_service;
+import 'package:facelogin/core/services/http_interceptor_service.dart';
 import 'package:facelogin/data/models/device_model.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +31,9 @@ class DeviceApiService {
           'Accept': ApiConstants.acceptHeader,
         },
       ).timeout(const Duration(seconds: 30));
+
+      // Check for 401 and handle logout (preserves E2E keys)
+      await handle401IfNeeded(response, null);
 
       debugPrint('📱 Devices API Response Status: ${response.statusCode}');
       debugPrint('📱 Devices API Response Body: ${response.body}');

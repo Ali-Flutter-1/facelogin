@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../constant/constant.dart';
+import '../../core/services/http_interceptor_service.dart';
 import '../../customWidgets/custom_text_field.dart';
 import '../../customWidgets/custom_toast.dart';
 import '../../customWidgets/premium_loading.dart';
@@ -124,25 +125,20 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen>
           _idVerified = user['id_verified'] ?? false; // Get ID verification status
           _isLoading = false;
         });
-      } else if (response.statusCode == 401) {
-        debugPrint("ProfileScreen: Access token invalid or expired");
-        showCustomToast(context, "Session expired. Please log in again.", isError: true);
-        // Clear only auth tokens, preserve E2E keys (SKd) and device ID
-        await prefs.remove('access_token');
-        await prefs.remove('refresh_token');
-        const secureStorage = FlutterSecureStorage();
-        await secureStorage.delete(key: 'e2e_ku_session'); // Clear session key only
-        // DO NOT delete: e2e_skd, device_id
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const GlassMorphismLoginScreen()),
-              (route) => false,
-        );
       } else {
+        // Check for 401 and handle logout (preserves E2E keys)
+        await handle401IfNeeded(response, context);
+        
+        if (response.statusCode == 401) {
+          // 401 handler will navigate to login, so just return here
+          return;
+        }
+        
         debugPrint("ProfileScreen: Failed to load profile: ${response.statusCode} - ${response.body}");
         showCustomToast(context, "Failed to load profile. Please try again.", isError: true);
         setState(() => _isLoading = false);
-      }} catch (e) {
+      }
+    } catch (e) {
       debugPrint("Network error: $e");
       showCustomToast(context, "Unable to load profile. Please check your connection and try again.", isError: true);
       setState(() => _isLoading = false,);

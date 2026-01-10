@@ -4,6 +4,7 @@ import 'package:facelogin/customWidgets/custom_button.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/data/services/pairing_service.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
+import 'package:facelogin/screens/linkDevice/link_device_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -133,7 +134,13 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
         showCustomToast(context, 'Device pairing approved successfully!');
         await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) {
-          Navigator.pop(context);
+          // Navigate to linked devices page
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const LinkDeviceScreen(),
+            ),
+          );
         }
       } else {
         showCustomToast(context, 'Failed to approve pairing', isError: true);

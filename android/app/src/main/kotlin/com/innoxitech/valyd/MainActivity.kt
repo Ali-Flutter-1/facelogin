@@ -1,4 +1,4 @@
-package com.example.facelogin
+package com.innoxitech.valyd
 
 import io.flutter.embedding.android.FlutterActivity
 

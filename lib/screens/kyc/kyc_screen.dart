@@ -243,21 +243,84 @@ class _KycScreenState extends State<KycScreen> {
             if (controller.step.value == 3 && controller.isLoading.value)
               Positioned.fill(
                 child: Container(
-                  color: Colors.black.withOpacity(0.7), // Fullscreen dark overlay
+                  color: Colors.black.withOpacity(0.85), // Fullscreen dark overlay
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       DotCircleLoader(size: 40),
-                      const SizedBox(height: 16),
-                       Text(
-                        'Verifying...',
+                      const SizedBox(height: 20),
+                      Text(
+                        'Verifying Your Identity...',
                         style: TextStyle(
                           fontFamily: 'OpenSans',
-                          color: Colors.blue.shade600,
+                          color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.3,
                           height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Countdown timer
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.blue.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Expected Time',
+                              style: TextStyle(
+                                fontFamily: 'OpenSans',
+                                color: Colors.white.withOpacity(0.7),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Obx(() => Text(
+                              controller.formattedRemainingTime,
+                              style: TextStyle(
+                                fontFamily: 'OpenSans',
+                                color: Colors.blue.shade400,
+                                fontSize: 36,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 2,
+                              ),
+                            )),
+                            const SizedBox(height: 4),
+                            Text(
+                              'remaining',
+                              style: TextStyle(
+                                fontFamily: 'OpenSans',
+                                color: Colors.white.withOpacity(0.5),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 48),
+                        child: Text(
+                          'Please wait while we verify your documents',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'OpenSans',
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            height: 1.4,
+                          ),
                         ),
                       ),
                     ],

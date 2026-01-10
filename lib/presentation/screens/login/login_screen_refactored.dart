@@ -3,7 +3,8 @@ import 'package:facelogin/core/constants/color_constants.dart';
 import 'package:facelogin/core/constants/message_constants.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/presentation/controllers/login_controller.dart';
-import 'package:facelogin/screens/profile/profile_screen.dart';
+import 'package:facelogin/screens/main/main_screen.dart';
+import 'package:facelogin/screens/splash/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -21,7 +22,7 @@ class LoginScreen extends StatelessWidget {
         if (context.mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            MaterialPageRoute(builder: (_) => const MainScreen()),
           );
         }
       });
@@ -229,7 +230,14 @@ class LoginScreen extends StatelessWidget {
       children: [
         const SizedBox(height: 30),
         InkWell(
-          onTap: controller.restartLogin,
+          onTap: () {
+            // Navigate to splash screen on Try Again
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const SplashScreen()),
+              (route) => false,
+            );
+          },
           borderRadius: BorderRadius.circular(16),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),

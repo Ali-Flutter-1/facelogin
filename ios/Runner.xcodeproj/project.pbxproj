@@ -10,11 +10,12 @@
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		4A1B7E85B7FE7C153BAEC018 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F47F360BD7E9465ADC5379A0 /* Pods_RunnerTests.framework */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
-		74C950E92B4E95100A398D3F /* libPods-Runner.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3822D66F5282721BDE306D1C /* libPods-Runner.a */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		AEAB12F64C9E077FC3FA4AB7 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3329FF734E396EEBEEFF5126 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,13 +42,16 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		091804F7E135CCB4852D0A39 /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
+		0F8C297F7F2F14C1863388EF /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		3822D66F5282721BDE306D1C /* libPods-Runner.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Runner.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3329FF734E396EEBEEFF5126 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
-		40616A9082696FC9A5990CA1 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		58C1C44C01909CD399D1E5DF /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
+		6D6FAA94D6DF26140C06B0BF /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -58,8 +62,9 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		D89DFDED29E1B310DCA37832 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
-		FB4F06CEC2F116ED5959299F /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		9F87EBBE3D713B9877DF729C /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
+		A8B814F56043D43FF300F2AA /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		F47F360BD7E9465ADC5379A0 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,7 +72,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				74C950E92B4E95100A398D3F /* libPods-Runner.a in Frameworks */,
+				AEAB12F64C9E077FC3FA4AB7 /* Pods_Runner.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D123427ED307E0A7B38801A4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A1B7E85B7FE7C153BAEC018 /* Pods_RunnerTests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,9 +90,12 @@
 		040DEB2D2F4258C5429598BC /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				40616A9082696FC9A5990CA1 /* Pods-Runner.debug.xcconfig */,
-				D89DFDED29E1B310DCA37832 /* Pods-Runner.release.xcconfig */,
-				FB4F06CEC2F116ED5959299F /* Pods-Runner.profile.xcconfig */,
+				0F8C297F7F2F14C1863388EF /* Pods-Runner.debug.xcconfig */,
+				58C1C44C01909CD399D1E5DF /* Pods-Runner.release.xcconfig */,
+				A8B814F56043D43FF300F2AA /* Pods-Runner.profile.xcconfig */,
+				6D6FAA94D6DF26140C06B0BF /* Pods-RunnerTests.debug.xcconfig */,
+				091804F7E135CCB4852D0A39 /* Pods-RunnerTests.release.xcconfig */,
+				9F87EBBE3D713B9877DF729C /* Pods-RunnerTests.profile.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -92,10 +108,11 @@
 			path = RunnerTests;
 			sourceTree = "<group>";
 		};
-		6107108F5FCF31AC0AC6200B /* Frameworks */ = {
+		62DAF6B7B39385C3AD8CBB2C /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				3822D66F5282721BDE306D1C /* libPods-Runner.a */,
+				3329FF734E396EEBEEFF5126 /* Pods_Runner.framework */,
+				F47F360BD7E9465ADC5379A0 /* Pods_RunnerTests.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -119,7 +136,7 @@
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				040DEB2D2F4258C5429598BC /* Pods */,
-				6107108F5FCF31AC0AC6200B /* Frameworks */,
+				62DAF6B7B39385C3AD8CBB2C /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -154,8 +171,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 331C8087294A63A400263BE5 /* Build configuration list for PBXNativeTarget "RunnerTests" */;
 			buildPhases = (
+				EC473BA063E2B0BBD2A14CBA /* [CP] Check Pods Manifest.lock */,
 				331C807D294A63A400263BE5 /* Sources */,
 				331C807F294A63A400263BE5 /* Resources */,
+				D123427ED307E0A7B38801A4 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -171,7 +190,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
-				AEAD51077A924E5C9AAFA8C7 /* [CP] Check Pods Manifest.lock */,
+				E2984F7DCF5C9B928709C1F4 /* [CP] Check Pods Manifest.lock */,
 				FDDFD7942EED3AB8002E87A1 /* Fix MLImage Framework */,
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
@@ -179,7 +198,8 @@
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
-				08FF1EB08C1E1C7662811B30 /* [CP] Copy Pods Resources */,
+				4F0841C1A56F1C1CADCF803C /* [CP] Copy Pods Resources */,
+				BEE82D9B0D100913D209A867 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -251,23 +271,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		08FF1EB08C1E1C7662811B30 /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Copy Pods Resources";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 		3B06AD1E1E4923F5004D2608 /* Thin Binary */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -284,6 +287,23 @@
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
 		};
+		4F0841C1A56F1C1CADCF803C /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		9740EEB61CF901F6004384FC /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -299,7 +319,24 @@
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
 		};
-		AEAD51077A924E5C9AAFA8C7 /* [CP] Check Pods Manifest.lock */ = {
+		BEE82D9B0D100913D209A867 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		E2984F7DCF5C9B928709C1F4 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -315,6 +352,28 @@
 			);
 			outputPaths = (
 				"$(DERIVED_FILE_DIR)/Pods-Runner-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		EC473BA063E2B0BBD2A14CBA /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-RunnerTests-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -337,7 +396,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nif [ \"${PLATFORM_NAME}\" == \"iphonesimulator\" ]; then\n  echo \"Fixing ML Kit frameworks for simulator build...\"\n  \n  for FRAMEWORK in MLImage MLKitCommon MLKitVision MLKitFaceDetection; do\n    FW_PATH=\"${PODS_ROOT}/${FRAMEWORK}/Frameworks/${FRAMEWORK}.framework/${FRAMEWORK}\"\n    if [ -f \"$FW_PATH\" ]; then\n      echo \"Processing ${FRAMEWORK}...\"\n      # Get architectures\n      ARCHS=$(lipo -info \"$FW_PATH\" 2>/dev/null | sed -n -e 's/^.*architecture: //p' || echo \"\")\n      echo \"  Current architectures: $ARCHS\"\n      \n      # Check if arm64 exists (device architecture)\n      if echo \"$ARCHS\" | grep -q \"arm64\"; then\n        # Check if x86_64 exists (simulator architecture)\n        if echo \"$ARCHS\" | grep -q \"x86_64\"; then\n          echo \"  Removing device arm64, keeping x86_64 for simulator...\"\n          # Remove device arm64, keep x86_64\n          lipo -remove arm64 \"$FW_PATH\" -output \"$FW_PATH.tmp\"\n          if [ -f \"$FW_PATH.tmp\" ]; then\n            mv -f \"$FW_PATH.tmp\" \"$FW_PATH\"\n            echo \"  ✓ Removed arm64 from ${FRAMEWORK}\"\n          fi\n        else\n          echo \"  ⚠ Warning: ${FRAMEWORK} only has arm64 (device), no x86_64 (simulator). This may cause issues.\"\n        fi\n      fi\n    else\n      echo \"  ${FRAMEWORK} framework not found at $FW_PATH\"\n    fi\n  done\n  echo \"Done fixing ML Kit frameworks.\"\nfi\n";
+			shellScript = "if [ \"${PLATFORM_NAME}\" == \"iphonesimulator\" ]; then\n  echo \"Fixing ML Kit frameworks for simulator build...\"\n  \n  # Check if we're on Apple Silicon (arm64 Mac)\n  MAC_ARCH=$(uname -m)\n  \n  for FRAMEWORK in MLImage MLKitCommon MLKitVision MLKitFaceDetection; do\n    FW_PATH=\"${PODS_ROOT}/${FRAMEWORK}/Frameworks/${FRAMEWORK}.framework/${FRAMEWORK}\"\n    if [ -f \"$FW_PATH\" ]; then\n      echo \"Processing ${FRAMEWORK}...\"\n      # Get architectures\n      ARCHS=$(lipo -info \"$FW_PATH\" 2>/dev/null | sed -n -e 's/^.*architecture: //p' || echo \"\")\n      echo \"  Current architectures: $ARCHS\"\n      \n      if [ \"$MAC_ARCH\" == \"arm64\" ]; then\n        # Apple Silicon Mac - need arm64 simulator slice\n        # Check if framework has arm64 simulator support\n        if echo \"$ARCHS\" | grep -q \"arm64\"; then\n          echo \"  Apple Silicon Mac detected - keeping arm64 for simulator\"\n          # On Apple Silicon, we can use arm64, but need to ensure it's simulator-compatible\n          # If framework only has device arm64, we'll need x86_64 (Rosetta)\n          if echo \"$ARCHS\" | grep -q \"x86_64\"; then\n            echo \"  Framework has both arm64 and x86_64 - using x86_64 for compatibility\"\n            lipo -extract x86_64 \"$FW_PATH\" -output \"$FW_PATH.tmp\" 2>/dev/null || true\n            if [ -f \"$FW_PATH.tmp\" ]; then\n              mv -f \"$FW_PATH.tmp\" \"$FW_PATH\"\n              echo \"  ✓ Extracted x86_64 from ${FRAMEWORK}\"\n            fi\n          fi\n        fi\n      else\n        # Intel Mac - remove arm64, keep x86_64\n        if echo \"$ARCHS\" | grep -q \"arm64\"; then\n          if echo \"$ARCHS\" | grep -q \"x86_64\"; then\n            echo \"  Removing device arm64, keeping x86_64 for simulator...\"\n            lipo -remove arm64 \"$FW_PATH\" -output \"$FW_PATH.tmp\" 2>/dev/null || true\n            if [ -f \"$FW_PATH.tmp\" ]; then\n              mv -f \"$FW_PATH.tmp\" \"$FW_PATH\"\n              echo \"  ✓ Removed arm64 from ${FRAMEWORK}\"\n            fi\n          fi\n        fi\n      fi\n    else\n      echo \"  ${FRAMEWORK} framework not found at $FW_PATH (skipping)\"\n    fi\n  done\n  echo \"Done fixing ML Kit frameworks.\"\nelse\n  echo \"Building for device (${PLATFORM_NAME}) - skipping ML Kit framework fix.\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -393,6 +452,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -424,6 +484,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "$(inherited) i386";
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -445,18 +506,22 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD)";
+				"ARCHS[sdk=iphonesimulator*]" = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1.1;
-				DEVELOPMENT_TEAM = WQJAG88Y5W;
+				DEVELOPMENT_TEAM = X3UH56X98N;
 				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = armv7;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "$(inherited)";
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.innoxitech.facelogin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.etnpxmsl.nagquz;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -466,13 +531,14 @@
 		};
 		331C8088294A63A400263BE5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6D6FAA94D6DF26140C06B0BF /* Pods-RunnerTests.debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.facelogin.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.etnpxmsl.nagquz.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -483,13 +549,14 @@
 		};
 		331C8089294A63A400263BE5 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 091804F7E135CCB4852D0A39 /* Pods-RunnerTests.release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.facelogin.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.etnpxmsl.nagquz.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
@@ -498,13 +565,14 @@
 		};
 		331C808A294A63A400263BE5 /* Profile */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9F87EBBE3D713B9877DF729C /* Pods-RunnerTests.profile.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.facelogin.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.etnpxmsl.nagquz.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
@@ -515,6 +583,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -546,6 +615,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "$(inherited) i386";
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -572,6 +642,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -603,6 +674,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "$(inherited) i386";
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -626,18 +698,21 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD)";
+				"ARCHS[sdk=iphonesimulator*]" = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1.1;
-				DEVELOPMENT_TEAM = WQJAG88Y5W;
+				DEVELOPMENT_TEAM = X3UH56X98N;
 				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = armv7;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.innoxitech.facelogin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.etnpxmsl.nagquz;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -650,18 +725,22 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD)";
+				"ARCHS[sdk=iphonesimulator*]" = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1.1;
-				DEVELOPMENT_TEAM = WQJAG88Y5W;
+				DEVELOPMENT_TEAM = X3UH56X98N;
 				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = armv7;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "$(inherited)";
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.innoxitech.facelogin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.etnpxmsl.nagquz;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

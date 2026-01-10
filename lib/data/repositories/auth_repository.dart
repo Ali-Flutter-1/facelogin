@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:facelogin/core/constants/app_constants.dart';
+import 'package:facelogin/core/services/device_service.dart' as device_id_service;
 import 'package:facelogin/core/services/e2e_service.dart';
+import 'package:facelogin/core/services/token_expiration_service.dart';
 import 'package:facelogin/data/models/login_response_model.dart';
 import 'package:facelogin/data/services/auth_service.dart';
 import 'package:flutter/foundation.dart';
@@ -31,43 +33,24 @@ class AuthRepository {
         _e2eService = e2eService ?? E2EService();
 
   /// Derive device public key (PKd) from stored private key seed (SKd)
-  /// Returns null if no local SKd exists
+  /// If no local SKd exists (Android uninstall scenario), generate a new temporary key pair
+  /// GLOBAL RULE: Ensure device keypair exists and return public key
+  /// On every login attempt:
+  /// - Check if local keypair exists → use it
+  /// - If missing → generate new keypair and store it securely
+  /// - Always return the public key to send with login request
   Future<String?> _deriveDevicePublicKey() async {
     try {
-      final skdBase64 = await _storage.read(key: 'e2e_skd');
-      if (skdBase64 == null || skdBase64.isEmpty) {
-        debugPrint('🔐 [AUTH] No local SKd found - skipping device_public_key');
-        return null;
+      // Use E2EService method that ensures keypair exists
+      final publicKey = await _e2eService.ensureDeviceKeypairExists();
+      if (publicKey != null) {
+        debugPrint('🔐 [AUTH] Device public key ready: ${publicKey.substring(0, 20)}...');
+      } else {
+        debugPrint('🔐 [AUTH] Failed to ensure device keypair exists');
       }
-      
-      debugPrint('🔐 [AUTH] Local SKd exists - deriving device_public_key');
-      final seedBytes = base64Decode(skdBase64);
-      
-      // Reconstruct keypair from seed to get PKd
-      final domainParams = ECCurve_secp256r1();
-      final keyGen = ECKeyGenerator();
-      final keyParams = ECKeyGeneratorParameters(domainParams);
-      final pcSecureRandom = SecureRandom('Fortuna');
-      pcSecureRandom.seed(KeyParameter(seedBytes.length >= 32 
-          ? Uint8List.fromList(seedBytes.sublist(0, 32))
-          : Uint8List.fromList([...seedBytes, ...List.filled(32 - seedBytes.length, 0)])));
-      keyGen.init(ParametersWithRandom(keyParams, pcSecureRandom));
-      final pcKeyPair = keyGen.generateKeyPair();
-      final pcPkd = pcKeyPair.publicKey as ECPublicKey;
-      
-      // Convert public key to bytes (65 bytes uncompressed: 0x04 + x + y)
-      final point = pcPkd.Q!;
-      final xBigInt = point.x!.toBigInteger()!;
-      final yBigInt = point.y!.toBigInteger()!;
-      final xBytes = _bigIntToBytes(xBigInt, 32);
-      final yBytes = _bigIntToBytes(yBigInt, 32);
-      final pkdBytes = Uint8List.fromList([0x04, ...xBytes, ...yBytes]);
-      
-      final pkdBase64 = base64Encode(pkdBytes);
-      debugPrint('🔐 [AUTH] device_public_key derived successfully');
-      return pkdBase64;
+      return publicKey;
     } catch (e) {
-      debugPrint('🔐 [AUTH] Failed to derive device_public_key: $e');
+      debugPrint('🔐 [AUTH] Error deriving device public key: $e');
       return null;
     }
   }
@@ -89,10 +72,26 @@ class AuthRepository {
   /// Login or register with face image
   /// Automatically handles E2E encryption bootstrap
   Future<AuthResult> loginOrRegister(Uint8List faceImageBytes) async {
+    // Get device ID (REQUIRED for login - fail if missing)
+    final deviceService = device_id_service.DeviceService();
+    String? deviceId;
+    try {
+      deviceId = await deviceService.getDeviceId();
+      if (deviceId != null && deviceId.isNotEmpty) {
+        debugPrint('📱 [AUTH] Device ID retrieved: ${deviceId.length > 8 ? deviceId.substring(0, 8) : deviceId}...');
+      } else {
+        debugPrint('❌ [AUTH] Device ID is empty after retrieval');
+        return AuthResult.error('Failed to retrieve device ID. Please try again.');
+      }
+    } catch (e) {
+      debugPrint('❌ [AUTH] Failed to get device ID: $e');
+      return AuthResult.error('Failed to retrieve device ID. Please try again.');
+    }
+    
     // Derive device_public_key from local SKd if exists (for iOS reinstall verification)
     final devicePublicKey = await _deriveDevicePublicKey();
     
-    final result = await _authService.loginOrRegister(faceImageBytes, devicePublicKey: devicePublicKey);
+    final result = await _authService.loginOrRegister(faceImageBytes, devicePublicKey: devicePublicKey, deviceId: deviceId);
 
     if (result.isSuccess && result.data != null) {
       try {
@@ -180,150 +179,179 @@ class AuthRepository {
         debugPrint('🔗 [AUTH] Login data type: ${loginData.runtimeType}');
         debugPrint('🔗 [AUTH] Full login data: $loginData');
         
+        // Parse backend fields - default to false if null
+        bool parseBool(dynamic value) {
+          if (value == null) return false;
+          if (value is bool) return value;
+          if (value is String) return value.toLowerCase() == 'true';
+          if (value is int) return value != 0;
+          return value.toString().toLowerCase() == 'true';
+        }
+        
+        // Initialize variables with default values (accessible outside if block)
+        bool isPublicKeyMatched = false;
+        bool isNewUser = false;
+        bool isDeviceFound = false;
+        bool isDeviceLinkedWithUser = false;
+        bool pairingRequired = false;
+        
         if (loginData != null && loginData is Map<String, dynamic>) {
           // Handle boolean values that might come as strings or booleans
           final isNewUserValue = loginData['is_new_user'];
           final pairingRequiredValue = loginData['pairingRequired'];
           final isPublicKeyMatchedValue = loginData['is_public_key_matched'];
+          final isDeviceFoundValue = loginData['is_device_found'];
           
           debugPrint('🔗 [AUTH] Raw is_new_user value: $isNewUserValue (type: ${isNewUserValue.runtimeType})');
           debugPrint('🔗 [AUTH] Raw pairingRequired value: $pairingRequiredValue (type: ${pairingRequiredValue.runtimeType})');
           debugPrint('🔗 [AUTH] Raw is_public_key_matched value: $isPublicKeyMatchedValue (type: ${isPublicKeyMatchedValue.runtimeType})');
+          debugPrint('🔗 [AUTH] Raw is_device_found value: $isDeviceFoundValue (type: ${isDeviceFoundValue.runtimeType})');
           final e2eStatus = loginData['e2e_status']?.toString();
           final e2eReason = loginData['e2e_reason']?.toString();
           final e2eScenario = loginData['e2e_scenario']?.toString();
           final e2eMessage = loginData['e2e_message']?.toString();
           final pairingOtp = loginData['pairingOtp']?.toString();
           
-          // Check is_public_key_matched FIRST - if false, pairing is required
-          bool? isPublicKeyMatched;
-          if (isPublicKeyMatchedValue is bool) {
-            isPublicKeyMatched = isPublicKeyMatchedValue;
-          } else if (isPublicKeyMatchedValue is String) {
-            isPublicKeyMatched = isPublicKeyMatchedValue.toLowerCase() == 'true';
-          } else if (isPublicKeyMatchedValue != null) {
-            isPublicKeyMatched = isPublicKeyMatchedValue.toString().toLowerCase() == 'true';
+          // Parse is_public_key_matched (default to false if null)
+          isPublicKeyMatched = parseBool(isPublicKeyMatchedValue);
+          
+          // Parse is_new_user (default to false if null)
+          isNewUser = parseBool(isNewUserValue);
+          
+          // Parse is_device_found (default to false if null)
+          isDeviceFound = parseBool(isDeviceFoundValue);
+          
+          // Parse is_device_linked_with_user (default to false if null)
+          final isDeviceLinkedWithUserValue = loginData['is_device_linked_with_user'] ?? loginData['isDeviceLinkedWithUser'];
+          isDeviceLinkedWithUser = parseBool(isDeviceLinkedWithUserValue);
+          
+          // Parse pairingRequired (default to false if null)
+          pairingRequired = parseBool(pairingRequiredValue);
+          
+          debugPrint('🔗 [AUTH] Parsed backend response (nulls default to false):');
+          debugPrint('🔗 [AUTH]   - is_new_user: $isNewUser');
+          debugPrint('🔗 [AUTH]   - is_device_found: $isDeviceFound');
+          debugPrint('🔗 [AUTH]   - is_device_linked_with_user: $isDeviceLinkedWithUser');
+          debugPrint('🔗 [AUTH]   - is_public_key_matched: $isPublicKeyMatched');
+          debugPrint('🔗 [AUTH]   - pairingRequired: $pairingRequired');
+          
+          // ============================================
+          // DECISION LOGIC (SIMPLIFIED)
+          // ============================================
+          
+          // Save tokens first (needed for all flows including pairing)
+          final prefs = await SharedPreferences.getInstance();
+          debugPrint('💾 Saving tokens to SharedPreferences (before decision logic)...');
+          
+          final accessTokenSaved = await prefs.setString(AppConstants.accessTokenKey, accessToken!);
+          final refreshTokenSaved = await prefs.setString(AppConstants.refreshTokenKey, result.data!.refreshToken!);
+          
+          debugPrint('💾 Token save results: accessToken=$accessTokenSaved, refreshToken=$refreshTokenSaved');
+
+          if (!accessTokenSaved || !refreshTokenSaved) {
+            debugPrint('❌ Failed to save tokens to SharedPreferences');
+            return AuthResult.error(
+              'Login successful but failed to save session. Please try again.',
+            );
           }
           
-          debugPrint('🔗 [AUTH] Parsed is_public_key_matched: $isPublicKeyMatched (from raw: $isPublicKeyMatchedValue)');
+          // Set token expiration to 1 hour from now
+          final tokenExpirationService = TokenExpirationService();
+          await tokenExpirationService.setTokenExpiration();
           
-          // Convert to boolean (handle both bool and string "true"/"false")
-          bool? isNewUser;
-          if (isNewUserValue is bool) {
-            isNewUser = isNewUserValue;
-          } else if (isNewUserValue is String) {
-            isNewUser = isNewUserValue.toLowerCase() == 'true';
-          } else if (isNewUserValue != null) {
-            // Handle other types (int: 0=false, 1=true)
-            isNewUser = isNewUserValue.toString().toLowerCase() == 'true';
+          // 1. If is_device_found = false
+          if (!isDeviceFound) {
+            debugPrint('🔗 [AUTH] Decision: is_device_found = false');
+            
+            // Check if user is new
+            if (isNewUser) {
+              debugPrint('🔗 [AUTH]   → is_new_user = true → Proceed to normal login/registration');
+              // Continue with normal flow (bootstrap/complete will be called)
+            } else {
+              // User exists but device not found
+              // This could mean:
+              // 1. User has E2E keys on another device → needs pairing
+              // 2. User was just created but has no E2E keys yet → needs bootstrap/complete (registration)
+              // We can't determine this from login response alone, so let bootstrap flow decide
+              debugPrint('🔗 [AUTH]   → is_new_user = false → User exists but device not found');
+              debugPrint('🔗 [AUTH]   → Letting bootstrap flow determine: pairing or registration');
+              // Continue with normal flow - bootstrap will check if user has E2E keys
+              // If user has no E2E keys, bootstrap will proceed with registration
+              // If user has E2E keys, bootstrap will detect pairing requirement
+            }
           }
-          
-          debugPrint('🔗 [AUTH] Parsed is_new_user: $isNewUser (from raw: $isNewUserValue, type: ${isNewUserValue.runtimeType})');
-          
-          bool? pairingRequired;
-          if (pairingRequiredValue is bool) {
-            pairingRequired = pairingRequiredValue;
-          } else if (pairingRequiredValue is String) {
-            pairingRequired = pairingRequiredValue.toLowerCase() == 'true';
-          }
-          
-          debugPrint('🔗 [AUTH] Login response - is_new_user: $isNewUser (raw: $isNewUserValue)');
-          debugPrint('🔗 [AUTH] Login response - pairingRequired: $pairingRequired (raw: $pairingRequiredValue)');
-          debugPrint('🔗 [AUTH] Login response - is_public_key_matched: $isPublicKeyMatched');
-          debugPrint('🔗 [AUTH] Login response - e2e_status: $e2eStatus');
-          debugPrint('🔗 [AUTH] Login response - e2e_reason: $e2eReason');
-          debugPrint('🔗 [AUTH] Login response - e2e_scenario: $e2eScenario');
-          debugPrint('🔗 [AUTH] Login response - pairingOtp: $pairingOtp');
-          
-          // Check if pairing is required: 
-          // 1. Existing user (is_new_user=false) AND public key mismatch (is_public_key_matched=false)
-          //    - This handles Android uninstall (keys deleted) or new device
-          //    - iOS with persisted keys will have is_public_key_matched=true, so no pairing needed
-          // 2. Explicit pairing signals from backend (e2e_reason or e2e_scenario)
-          // 
-          // IMPORTANT: If local keys exist (iOS Keychain persists after reinstall), 
-          // skip early pairing and let bootstrap verify the keys
-          final hasLocalKeys = await _e2eService.hasE2EKeys();
-          debugPrint('🔗 [AUTH] Local E2E keys exist: $hasLocalKeys');
-          
-          // If local keys exist, skip pairing check - let bootstrap handle verification
-          // This fixes iOS reinstall scenario where Keychain keys persist
-          bool needsPairing = false;
-          if (!hasLocalKeys) {
-            // No local keys - check backend signals for pairing
-            needsPairing = ((isNewUser == false && isPublicKeyMatched == false) ||
-                            e2eReason == 'NEW_DEVICE_NEEDS_PAIRING' || 
-                            e2eScenario == 'EXISTING_USER_NEEDS_PAIRING');
-          }
-          
-          debugPrint('🔗 [AUTH] Needs pairing check: $needsPairing');
-          debugPrint('🔗 [AUTH] Condition: hasLocalKeys=$hasLocalKeys, is_new_user=$isNewUser, is_public_key_matched=$isPublicKeyMatched, e2e_reason=$e2eReason, e2e_scenario=$e2eScenario');
-          
-          if (needsPairing) {
-            // CRITICAL: Check device owner BEFORE allowing pairing
-            // If different user tries to pair, block them
-            if (currentUserId != null) {
-              final existingOwner = await _e2eService.getDeviceOwnerUserId();
-              if (existingOwner != null && existingOwner != currentUserId) {
-                debugPrint('🔐 [AUTH] ⚠️ SECURITY: Different user trying to pair - BLOCKING');
-                debugPrint('🔐 [AUTH] Device owner: $existingOwner, Attempting user: $currentUserId');
-                return AuthResult.error(
-                  'This device is already registered to another account.\n\n'
-                  'Please use a different device'
-                );
-              }
+          // 2. If is_device_found = true
+          else {
+            debugPrint('🔗 [AUTH] Decision: is_device_found = true');
+            
+            // 2.1 Check if device is linked with user
+            if (!isDeviceLinkedWithUser) {
+              debugPrint('🔗 [AUTH]   → is_device_linked_with_user = false → Access denied');
+              return AuthResult.error(
+                'This device belongs to another user. Access denied.'
+              );
             }
             
-            debugPrint('🔗 [AUTH] ✅ Pairing required detected! Showing QR code dialog');
-            // Save tokens first so we can use them for pairing request
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString(AppConstants.accessTokenKey, accessToken!);
-            await prefs.setString(AppConstants.refreshTokenKey, result.data!.refreshToken!);
-            return AuthResult.pairingRequired(e2eMessage ?? 'Device pairing required');
-          } else {
-            debugPrint('🔗 [AUTH] ❌ Pairing NOT required in login response - continuing normal login');
+            // 2.2 Device is linked with user - validate public key
+            debugPrint('🔗 [AUTH]   → is_device_linked_with_user = true → Validating public key');
+            
+            // 3. Validate public key
+            if (isPublicKeyMatched) {
+              debugPrint('🔗 [AUTH]     → is_public_key_matched = true → Direct login');
+              // Continue with normal flow (direct login)
+            } else {
+              debugPrint('🔗 [AUTH]     → is_public_key_matched = false → Show pairing screen first (generate QR code)');
+              // Return early to show pairing screen immediately
+              // Pairing screen will generate QR code first, then poll bootstrap
+              // CRITICAL: Check device owner BEFORE allowing pairing
+              if (currentUserId != null) {
+                final existingOwner = await _e2eService.getDeviceOwnerUserId();
+                if (existingOwner != null && existingOwner != currentUserId) {
+                  debugPrint('🔐 [AUTH] ⚠️ SECURITY: Different user trying to pair - BLOCKING');
+                  debugPrint('🔐 [AUTH] Device owner: $existingOwner, Attempting user: $currentUserId');
+                  return AuthResult.error(
+                    'This device is already registered to another account.\n\n'
+                    'Please use a different device'
+                  );
+                }
+              }
+              return AuthResult.pairingRequired(
+                'Device pairing required. Your device keys were reset. Please scan QR code or enter OTP to pair your device.'
+              );
+            }
           }
+          
+          // If we reach here, continue with normal login flow
+          debugPrint('🔗 [AUTH] Decision: Continuing with normal login flow');
         } else {
           debugPrint('🔗 [AUTH] ⚠️ Login data is null or not a Map - will check bootstrap response');
-        }
-        
-        // Save tokens to SharedPreferences (needed for bootstrap call)
-        final prefs = await SharedPreferences.getInstance();
-        debugPrint('💾 Saving tokens to SharedPreferences...');
-        
-        final accessTokenSaved = await prefs.setString(
-          AppConstants.accessTokenKey,
-          accessToken!,
-        );
-        final refreshTokenSaved = await prefs.setString(
-          AppConstants.refreshTokenKey,
-          result.data!.refreshToken!,
-        );
-
-        debugPrint('💾 Token save results: accessToken=$accessTokenSaved, refreshToken=$refreshTokenSaved');
-
-        if (!accessTokenSaved || !refreshTokenSaved) {
-          debugPrint('❌ Failed to save tokens to SharedPreferences');
-          return AuthResult.error(
-            'Login successful but failed to save session. Please try again.',
+          
+          // Save tokens even if login data is null (needed for bootstrap)
+          final prefs = await SharedPreferences.getInstance();
+          debugPrint('💾 Saving tokens to SharedPreferences (login data null)...');
+          
+          final accessTokenSaved = await prefs.setString(
+            AppConstants.accessTokenKey,
+            accessToken!,
           );
-        }
-
-        // Verify tokens were saved
-        final savedAccessToken = prefs.getString(AppConstants.accessTokenKey);
-        final savedRefreshToken = prefs.getString(AppConstants.refreshTokenKey);
-
-        debugPrint('💾 Token verification: accessToken=${savedAccessToken != null && savedAccessToken.isNotEmpty}, refreshToken=${savedRefreshToken != null && savedRefreshToken.isNotEmpty}');
-
-        if (savedAccessToken == null || savedAccessToken.isEmpty || 
-            savedRefreshToken == null || savedRefreshToken.isEmpty) {
-          debugPrint('❌ Token verification failed');
-          return AuthResult.error(
-            'Login successful but failed to save session. Please try again.',
+          final refreshTokenSaved = await prefs.setString(
+            AppConstants.refreshTokenKey,
+            result.data!.refreshToken!,
           );
+
+          debugPrint('💾 Token save results: accessToken=$accessTokenSaved, refreshToken=$refreshTokenSaved');
+
+          if (!accessTokenSaved || !refreshTokenSaved) {
+            debugPrint('❌ Failed to save tokens to SharedPreferences');
+            return AuthResult.error(
+              'Login successful but failed to save session. Please try again.',
+            );
+          }
+          
+          // Set token expiration to 1 hour from now
+          final tokenExpirationService = TokenExpirationService();
+          await tokenExpirationService.setTokenExpiration();
         }
-        
-        debugPrint('✅ Tokens saved and verified successfully');
 
         // DOUBLE CHECK: Re-check pairing requirement after token save (in case we missed it earlier)
         // This is a safety check to prevent direct login when pairing is required
@@ -394,7 +422,11 @@ class AuthRepository {
           final hasLocalKeysRecheck = await _e2eService.hasE2EKeys();
           bool needsPairingRecheck = false;
           if (!hasLocalKeysRecheck) {
-            needsPairingRecheck = ((isNewUserBool == false && isPublicKeyMatchedBool == false) ||
+            // CRITICAL: If is_new_user is false (existing user) and is_public_key_matched is false OR null,
+            // this indicates Android reinstall scenario (keys deleted) - pairing is required
+            final publicKeyMismatchRecheck = isPublicKeyMatchedBool == false || 
+                                            (isNewUserBool == false && isPublicKeyMatchedBool == null);
+            needsPairingRecheck = ((isNewUserBool == false && publicKeyMismatchRecheck) ||
                                    e2eReasonRecheck == 'NEW_DEVICE_NEEDS_PAIRING' || 
                                    e2eScenarioRecheck == 'EXISTING_USER_NEEDS_PAIRING');
           }
@@ -448,37 +480,73 @@ class AuthRepository {
         E2EBootstrapResult e2eResult;
         
         // Decision logic:
-        // 1. If isNewUser == false (existing user), always use bootstrapForLogin (will detect pairing if needed)
-        // 2. If isNewUser == true (new user), use bootstrapForRegistration
-        // 3. If isNewUser is unknown, fall back to checking local keys
-        if (isNewUserFromResponse == false) {
+        // 1. If isNewUser == true (explicitly new user), use bootstrapForRegistration
+        // 2. If isNewUser == false (existing user), always use bootstrapForLogin (will detect pairing if needed)
+        // 3. If isNewUser is unknown (null), default to LOGIN flow (safer - will detect pairing or fall back to registration)
+        //    This fixes: existing user clears data → is_new_user=null → should still trigger pairing
+        if (isNewUserFromResponse == true) {
+          // New user - registration flow (Phase 2: E2E Key Bootstrap)
+          print('🔐 E2E Flow: REGISTRATION (new user)');
+          e2eResult = await _e2eService.bootstrapForRegistration(accessToken);
+        } else if (isNewUserFromResponse == false) {
           // Existing user on new device - use login flow (will detect pairing requirement)
           // This prevents generating new recovery phrase for existing users
           print('🔐 E2E Flow: LOGIN (existing user, may need pairing)');
           debugPrint('🔐 [AUTH] Existing user detected - using login flow to prevent duplicate recovery phrase');
           e2eResult = await _e2eService.bootstrapForLogin(accessToken);
-        } else if (isNewUserFromResponse == true) {
-          // New user - registration flow (Phase 2: E2E Key Bootstrap)
-          print('🔐 E2E Flow: REGISTRATION (new user)');
-          e2eResult = await _e2eService.bootstrapForRegistration(accessToken);
         } else {
-          // isNewUser is unknown - fall back to checking local keys
+          // isNewUser is unknown (null) - need to determine flow
+          // If no local keys, try REGISTRATION first (likely new user)
+          // If registration fails (user exists), fall back to login/pairing
           if (hasExistingKeys) {
-            // Existing user - login flow (Phase 3.4-3.6)
-            // This will automatically fall back to registration if server says E2E_NOT_SETUP
+            // Has local keys - definitely use login flow
             print('🔐 E2E Flow: LOGIN (fallback - local keys exist)');
             e2eResult = await _e2eService.bootstrapForLogin(accessToken);
           } else {
-            // New user - registration flow (Phase 2: E2E Key Bootstrap)
-            print('🔐 E2E Flow: REGISTRATION (fallback - no local keys)');
+            // No local keys and isNewUser unknown - try REGISTRATION first
+            // This handles first-time registration where backend returns is_new_user=null
+            // If registration fails (user already has E2E), fall back to login/pairing
+            print('🔐 E2E Flow: REGISTRATION (fallback - isNewUser unknown, no local keys, trying registration first)');
+            debugPrint('🔐 [AUTH] Unknown user status, no local keys - trying registration first');
             e2eResult = await _e2eService.bootstrapForRegistration(accessToken);
+            
+            // If registration fails with "already exists" error, fall back to login
+            if (!e2eResult.isSuccess && 
+                (e2eResult.error?.toLowerCase().contains('already') == true ||
+                 e2eResult.error?.toLowerCase().contains('exists') == true)) {
+              print('🔐 E2E Flow: Registration failed (user exists) - falling back to LOGIN');
+              debugPrint('🔐 [AUTH] Registration failed, user already has E2E - using login flow');
+              e2eResult = await _e2eService.bootstrapForLogin(accessToken);
+            }
           }
         }
 
-        // CRITICAL: Check if pairing is required (E2E set up on another device)
+        // CRITICAL: Check if recovery is required (keys mismatch - is_public_key_matched = false)
+        // This takes priority over pairing - user must recover account using recovery phrase
+        if (e2eResult.needsRecovery) {
+          print('🔗 E2E Recovery Required (from bootstrap response)');
+          debugPrint('🔗 [AUTH] E2E keys mismatch - recovery required');
+          debugPrint('🔗 [AUTH] E2E error message: ${e2eResult.error}');
+          debugPrint('🔗 [AUTH] Bootstrap detected recovery requirement - user must use recovery phrase');
+          
+          // Save tokens first so recovery can use them
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(AppConstants.accessTokenKey, accessToken!);
+          await prefs.setString(AppConstants.refreshTokenKey, result.data!.refreshToken!);
+          
+          return AuthResult.recoveryRequired(
+            e2eResult.error ?? 'Account recovery required. Please use your recovery phrase to restore access.'
+          );
+        }
+        
+        // CRITICAL: Check if pairing is required (E2E set up on another device OR public key mismatch)
         // This check MUST happen even if login response didn't have pairing fields
         // Bootstrap response is the authoritative source for pairing requirement
-        if (e2eResult.needsPairing) {
+        // Also check if is_public_key_matched = false from login response
+        final needsPairingFromBootstrap = e2eResult.needsPairing;
+        final needsPairingFromLogin = (!isPublicKeyMatched && isDeviceFound && isDeviceLinkedWithUser);
+        
+        if (needsPairingFromBootstrap || needsPairingFromLogin) {
           // CRITICAL: Check device owner BEFORE allowing pairing from bootstrap
           // If different user tries to pair, block them
           if (currentUserId != null) {
@@ -493,13 +561,13 @@ class AuthRepository {
             }
           }
           
-          print('🔗 E2E Pairing Required (from bootstrap response)');
-          debugPrint('🔗 [AUTH] E2E encryption is set up on another device');
+          print('🔗 E2E Pairing Required (from bootstrap response or public key mismatch)');
+          debugPrint('🔗 [AUTH] Pairing needed - bootstrap: $needsPairingFromBootstrap, login: $needsPairingFromLogin');
           debugPrint('🔗 [AUTH] E2E error message: ${e2eResult.error}');
-          debugPrint('🔗 [AUTH] Bootstrap detected pairing requirement - blocking direct login');
+          debugPrint('🔗 [AUTH] Bootstrap will continue running while pairing screen is shown');
           // Return special result indicating pairing is needed
-          // This will trigger QR code dialog even if login response didn't have pairing fields
-          return AuthResult.pairingRequired(e2eResult.error ?? 'Device pairing required');
+          // This will trigger QR code dialog and bootstrap will continue polling
+          return AuthResult.pairingRequired(e2eResult.error ?? 'Device pairing required. Please scan QR code or enter OTP to pair your device.');
         }
 
         // SECURITY: Verify E2E keys are properly set up before allowing login
@@ -512,6 +580,33 @@ class AuthRepository {
           print('🔐 E2E Setup: Failed - ${e2eResult.error}');
           debugPrint('⚠️ [AUTH] E2E setup failed: ${e2eResult.error}');
           
+          // Check if error indicates user has no E2E at all (new user)
+          final e2eError = e2eResult.error?.toLowerCase() ?? '';
+          final isNewUserError = e2eError.contains('e2e_not_setup_new_user') ||
+                                e2eError.contains('no existing e2e') ||
+                                e2eError.contains('use bootstrap/complete') ||
+                                (e2eError.contains('not set up') && e2eError.contains('generate keys'));
+          
+          if (isNewUserError) {
+            // User has no E2E at all - this is a new user, use registration
+            debugPrint('🔐 [AUTH] Login detected new user (no E2E) - falling back to registration');
+            try {
+              final registrationResult = await _e2eService.bootstrapForRegistration(accessToken);
+              if (registrationResult.isSuccess) {
+                debugPrint('🔐 [AUTH] Registration successful after login fallback');
+                final hasE2EKeysAfterReg = await _e2eService.hasE2EKeys();
+                final hasSessionKuAfterReg = await _e2eService.getSessionKu() != null;
+                if (hasE2EKeysAfterReg && hasSessionKuAfterReg) {
+                  return AuthResult.success(result.data!, recoveryPhrase: registrationResult.recoveryPhrase);
+                }
+              }
+              // If registration also failed, continue to error handling below
+              debugPrint('🔐 [AUTH] Registration fallback also failed');
+            } catch (regError) {
+              debugPrint('🔐 [AUTH] Registration fallback exception: $regError');
+            }
+          }
+          
           // SECURITY: Block login if keys are missing (user cleared cache or reinstalled app)
           if (!hasE2EKeys) {
             debugPrint('🔐 [AUTH] ⚠️ SECURITY: E2E keys missing - blocking login');
@@ -519,28 +614,68 @@ class AuthRepository {
             
             // Check if this is a new user (should register) or existing user (needs pairing)
             final loginData = result.data!.data;
+            bool? isNewUser;
             if (loginData != null && loginData is Map<String, dynamic>) {
               final isNewUserValue = loginData['is_new_user'];
-              bool? isNewUser;
               if (isNewUserValue is bool) {
                 isNewUser = isNewUserValue;
               } else if (isNewUserValue is String) {
                 isNewUser = isNewUserValue.toLowerCase() == 'true';
               }
-              
-              // If existing user but keys missing, force pairing
-              if (isNewUser == false) {
-                debugPrint('🔐 [AUTH] Existing user with missing keys - forcing pairing');
-                return AuthResult.pairingRequired(
-                  'E2E keys not found. Device pairing required. Please scan QR code or enter OTP.'
+            }
+            
+            // Check e2eResult.error for signals that E2E exists on another device
+            // This helps when is_new_user is null but we know user has E2E elsewhere
+            final hasE2EElsewhere = e2eError.contains('another device') ||
+                                    e2eError.contains('pairing') ||
+                                    e2eError.contains('new_device') ||
+                                    e2eError.contains('not_setup_for_this_device');
+            
+            debugPrint('🔐 [AUTH] isNewUser: $isNewUser, hasE2EElsewhere: $hasE2EElsewhere, e2eError: ${e2eResult.error}');
+            
+            // If existing user (is_new_user=false) OR E2E exists elsewhere → force pairing
+            // This fixes: is_new_user=null but E2E exists on another device
+            if (isNewUser == false || hasE2EElsewhere) {
+              debugPrint('🔐 [AUTH] Existing user with missing keys - forcing pairing');
+              return AuthResult.pairingRequired(
+                'E2E keys not found. Device pairing required. Please scan QR code or enter OTP.'
+              );
+            }
+            
+            // Only force registration if this is truly a NEW user (is_new_user == true)
+            // For new users, if bootstrap failed, retry registration automatically
+            if (isNewUser == true) {
+              debugPrint('🔐 [AUTH] New user - bootstrap failed, retrying registration');
+              // Retry bootstrap for registration - this handles cases where first attempt failed
+              try {
+                final retryResult = await _e2eService.bootstrapForRegistration(accessToken);
+                if (retryResult.isSuccess) {
+                  debugPrint('🔐 [AUTH] Registration retry successful');
+                  // Check if keys are now present
+                  final hasE2EKeysAfterRetry = await _e2eService.hasE2EKeys();
+                  final hasSessionKuAfterRetry = await _e2eService.getSessionKu() != null;
+                  if (hasE2EKeysAfterRetry && hasSessionKuAfterRetry) {
+                    return AuthResult.success(result.data!, recoveryPhrase: retryResult.recoveryPhrase);
+                  }
+                }
+                // If retry also failed, return error
+                debugPrint('🔐 [AUTH] Registration retry also failed');
+                return AuthResult.error(
+                  'E2E encryption setup required. Please try logging in again to complete setup.'
+                );
+              } catch (retryError) {
+                debugPrint('🔐 [AUTH] Registration retry exception: $retryError');
+                return AuthResult.error(
+                  'E2E encryption setup required. Please try logging in again to complete setup.'
                 );
               }
             }
             
-            // New user or unknown - force registration
-            debugPrint('🔐 [AUTH] Keys missing - forcing E2E registration');
-            return AuthResult.error(
-              'E2E encryption setup required. Please try logging in again to complete setup.'
+            // Unknown case (is_new_user is null and no E2E signals) - default to pairing
+            // Safer to show pairing dialog than to block with error
+            debugPrint('🔐 [AUTH] Unknown user status - defaulting to pairing dialog');
+            return AuthResult.pairingRequired(
+              'Device setup required. Please scan QR code or enter OTP, or use recovery phrase.'
             );
           }
           
@@ -578,6 +713,43 @@ class AuthRepository {
         );
       }
     } else {
+      // Login/register API returned an error - check if it indicates pairing requirement
+      final errorMessage = result.error?.toLowerCase() ?? '';
+      debugPrint('🔗 [AUTH] Login/register API error: ${result.error}');
+      
+      // Check if error indicates pairing requirement (Android reinstall scenario)
+      // Common error messages: "already registered", "e2e keys", "device", "registered", "bootstrap"
+      final normalizedError = errorMessage;
+      final indicatesPairing = normalizedError.contains('already registered') ||
+                               normalizedError.contains('e2e') ||
+                               normalizedError.contains('device') ||
+                               normalizedError.contains('registered') ||
+                               normalizedError.contains('keys') ||
+                               (normalizedError.contains('bootstrap') && normalizedError.contains('complete'));
+      
+      // Check if we have local keys
+      final hasLocalKeys = await _e2eService.hasE2EKeys();
+      debugPrint('🔗 [AUTH] Error indicates pairing: $indicatesPairing, hasLocalKeys: $hasLocalKeys');
+      debugPrint('🔗 [AUTH] Error message: ${result.error}');
+      
+      // If error indicates pairing and we have no local keys, this is likely Android reinstall
+      // Also check if error mentions bootstrap/complete (which suggests pairing is needed)
+      if (indicatesPairing && !hasLocalKeys) {
+        debugPrint('🔗 [AUTH] ✅ Detected Android reinstall scenario - showing pairing screen');
+        return AuthResult.pairingRequired(
+          'Device pairing required. Please scan QR code or enter OTP, or use your recovery phrase.'
+        );
+      }
+      
+      // Also check for specific error patterns that indicate pairing
+      // "this user has not e2e set up first call bootstrap/complete" suggests pairing needed
+      if (normalizedError.contains('bootstrap') && normalizedError.contains('complete') && !hasLocalKeys) {
+        debugPrint('🔗 [AUTH] ✅ Bootstrap/complete error detected - showing pairing screen');
+        return AuthResult.pairingRequired(
+          'Device pairing required. Please scan QR code or enter OTP, or use your recovery phrase.'
+        );
+      }
+      
       return AuthResult.error(result.error ?? 'Login failed');
     }
   }
@@ -604,6 +776,9 @@ class AuthRepository {
     await prefs.remove(AppConstants.refreshTokenKey);
     // Clear E2E session key (Ku) only - SKd stays on device
     await _e2eService.clearSessionKeys();
+    // Clear token expiration
+    final tokenExpirationService = TokenExpirationService();
+    await tokenExpirationService.clearTokenExpiration();
     debugPrint('🔐 Cleared auth tokens and session key, kept device key (SKd)');
   }
 
@@ -624,20 +799,30 @@ class AuthResult {
   final LoginResponseModel? data;
   final String? error;
   final bool requiresPairing;
+  final bool requiresRecovery;
   final String? recoveryPhrase;
 
   AuthResult.success(this.data, {this.recoveryPhrase}) 
       : error = null, 
-        requiresPairing = false;
+        requiresPairing = false,
+        requiresRecovery = false;
   
   AuthResult.error(this.error) 
       : data = null, 
         requiresPairing = false,
+        requiresRecovery = false,
         recoveryPhrase = null;
   
   AuthResult.pairingRequired(this.error)
       : data = null,
         requiresPairing = true,
+        requiresRecovery = false,
+        recoveryPhrase = null;
+  
+  AuthResult.recoveryRequired(this.error)
+      : data = null,
+        requiresPairing = false,
+        requiresRecovery = true,
         recoveryPhrase = null;
 
   bool get isSuccess => data != null;

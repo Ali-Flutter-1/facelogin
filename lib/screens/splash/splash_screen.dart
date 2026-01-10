@@ -5,7 +5,7 @@ import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../profile/profile_screen.dart';
+import '../main/main_screen.dart';
 
 
 class SplashScreen extends StatefulWidget {
@@ -117,7 +117,7 @@ class _SplashScreenState extends State<SplashScreen> {
             if (!mounted) return;
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              MaterialPageRoute(builder: (_) => const MainScreen()),
             );
             return;
           } else {

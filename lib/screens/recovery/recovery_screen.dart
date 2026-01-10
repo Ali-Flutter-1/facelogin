@@ -3,7 +3,7 @@ import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:facelogin/core/services/recovery_key_service.dart';
 import 'package:facelogin/customWidgets/custom_button.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
-import 'package:facelogin/screens/profile/profile_screen.dart';
+import 'package:facelogin/screens/main/main_screen.dart';
 import 'package:facelogin/screens/splash/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -143,22 +143,22 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             ),
           );
           
-          // Wait for everything to sync (3 seconds)
-          await Future.delayed(const Duration(milliseconds: 3000));
+          // Wait for everything to sync (5 seconds)
+          await Future.delayed(const Duration(milliseconds: 5000));
           
           if (!mounted) return;
           
           // Close the dialog
           Navigator.of(context).pop();
           
-          setState(() {
-            _isProcessing = false;
-          });
-          
+        setState(() {
+          _isProcessing = false;
+        });
+        
           // Navigate to profile and clear entire navigation stack
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (_) => const ProfileScreen(fromRecovery: true)),
+            MaterialPageRoute(builder: (_) => const MainScreen()),
             (route) => false, // Remove all previous routes
           );
         } else {

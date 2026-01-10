@@ -19,7 +19,8 @@ class AuthService {
 
   /// Login or register with face image
   /// [devicePublicKey] - Optional device public key (base64) for iOS reinstall verification
-  Future<Result<LoginResponseModel>> loginOrRegister(Uint8List faceImageBytes, {String? devicePublicKey}) async {
+  /// [deviceId] - Device ID (required) to identify the device
+  Future<Result<LoginResponseModel>> loginOrRegister(Uint8List faceImageBytes, {String? devicePublicKey, String? deviceId}) async {
     try {
       // Validate API URL
       if (ApiConstants.loginOrRegister.isEmpty) {
@@ -44,8 +45,21 @@ class AuthService {
       final dataUrl = _imageService.imageToBase64DataUrl(resizedBytes);
       debugPrint("✅ Data URL created (length: ${dataUrl.length})");
 
-      // Create request body - include device_public_key if available
-      final Map<String, dynamic> requestBody = {"face_image": dataUrl};
+      // Device ID is REQUIRED - fail early if missing
+      if (deviceId == null || deviceId.isEmpty) {
+        debugPrint("❌ ERROR: deviceId is required but missing - aborting login request");
+        return Result.error('Device ID is required. Please try again.');
+      }
+      
+      // Create request body - include deviceId and device_public_key
+      final Map<String, dynamic> requestBody = {
+        "face_image": dataUrl,
+        "deviceId": deviceId, // REQUIRED (camelCase)
+      };
+      
+      debugPrint("✅ Including deviceId in login request: ${deviceId.length > 8 ? deviceId.substring(0, 8) : deviceId}...");
+      
+      // Device public key is optional but recommended
       if (devicePublicKey != null && devicePublicKey.isNotEmpty) {
         requestBody["device_public_key"] = devicePublicKey;
         debugPrint("✅ Including device_public_key in login request");

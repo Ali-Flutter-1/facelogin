@@ -21,9 +21,45 @@ class KycController extends GetxController {
   RxBool isLoading = false.obs;
   RxBool isUploadingFront = false.obs;
   RxBool isUploadingBack = false.obs;
-
+  
+  // Countdown timer for verification
+  static const int verificationTimeSeconds = 150;
+  RxInt remainingSeconds = verificationTimeSeconds.obs;
+  Timer? _countdownTimer;
 
   final ImagePicker picker = ImagePicker();
+  
+  /// Start the countdown timer
+  void _startCountdown() {
+    remainingSeconds.value = verificationTimeSeconds;
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (remainingSeconds.value > 0) {
+        remainingSeconds.value--;
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+  
+  /// Stop the countdown timer
+  void _stopCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+  }
+  
+  /// Format seconds to MM:SS
+  String get formattedRemainingTime {
+    final minutes = (remainingSeconds.value ~/ 60).toString().padLeft(2, '0');
+    final seconds = (remainingSeconds.value % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+  
+  @override
+  void onClose() {
+    _stopCountdown();
+    super.onClose();
+  }
 
 
 
@@ -438,7 +474,7 @@ class KycController extends GetxController {
     }
 
     // Start countdown timer
-
+    _startCountdown();
     isLoading.value = true;
 
     final url = Uri.parse(ApiConstants.kyc);
@@ -469,7 +505,7 @@ class KycController extends GetxController {
       print("🔹 Response (${response.statusCode}): ${response.body}");
 
       // Stop countdown
-
+      _stopCountdown();
       isLoading.value = false;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -490,7 +526,7 @@ class KycController extends GetxController {
       }
     } catch (e) {
       print(" Exception during KYC: $e");
-
+      _stopCountdown();
       isLoading.value = false;
       showCustomToast(context, "Something went wrong. Please try again.", isError: true);
       // Clear images from UI on exception

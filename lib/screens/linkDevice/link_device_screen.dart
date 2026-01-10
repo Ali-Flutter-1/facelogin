@@ -14,7 +14,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class LinkDeviceScreen extends StatefulWidget {
-  const LinkDeviceScreen({Key? key}) : super(key: key);
+  final bool autoOpenScanner;
+  
+  const LinkDeviceScreen({Key? key, this.autoOpenScanner = false}) : super(key: key);
 
   @override
   State<LinkDeviceScreen> createState() => _LinkDeviceScreenState();
@@ -33,6 +35,13 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
   void initState() {
     super.initState();
     _fetchDevices();
+    
+    // Auto-open scanner if requested
+    if (widget.autoOpenScanner) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openQRScanner();
+      });
+    }
   }
 
   @override
@@ -90,17 +99,38 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
         }
       }
 
-      debugPrint('🔗 Processing pairing - pairingToken: $pairingToken, deviceIdB: $deviceIdB');
+      debugPrint('🔗 [Pairing] Processing pairing - pairingToken: $pairingToken, deviceIdB: $deviceIdB');
 
       // Step 1: Lookup pairing by token to get PKd2 (Device B's public key)
-      final lookupResult = await _pairingService.lookupByPairingToken(pairingToken);
+      debugPrint('🔗 [Pairing] Calling lookupByPairingToken API...');
+      final lookupResult = await _pairingService.lookupByPairingToken(pairingToken, context: context);
+      debugPrint('🔗 [Pairing] lookupByPairingToken result - isSuccess: ${lookupResult.isSuccess}, error: ${lookupResult.error}');
+      
+      // If 401 occurred, the handler already navigated away, so just return
+      if (!mounted) return;
+      
+      // Close loading dialog if still open
+      try {
+        Navigator.pop(context);
+      } catch (e) {
+        debugPrint('🔗 Dialog already closed or context invalid: $e');
+      }
+      
+      // If lookup failed, show error and return
+      if (!lookupResult.isSuccess) {
+        showCustomToast(
+          context,
+          lookupResult.error ?? 'Failed to lookup pairing',
+          isError: true,
+        );
+        return;
+      }
       
       // Use deviceIdB from QR code if available, otherwise fallback to lookup result
       final finalDeviceIdB = deviceIdB ?? lookupResult.deviceId;
       
       if (finalDeviceIdB == null) {
         if (!mounted) return;
-        Navigator.pop(context);
         showCustomToast(
           context,
           'Device ID not found in QR code or lookup response',
@@ -110,18 +140,6 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
       }
       
       debugPrint('🔗 Using deviceIdB: $finalDeviceIdB (from QR: ${deviceIdB != null}, from lookup: ${lookupResult.deviceId != null})');
-
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
-
-      if (!lookupResult.isSuccess) {
-        showCustomToast(
-          context,
-          lookupResult.error ?? 'Failed to lookup pairing',
-          isError: true,
-        );
-        return;
-      }
 
       // Step 2: Get current session Ku
       final ku = await _e2eService.getSessionKu();
@@ -153,6 +171,13 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
         showCustomToast(context, 'Device pairing approved successfully!');
         // Refresh devices list
         await _fetchDevices();
+        
+        // Navigate to linked devices page (this screen)
+        // Already on this screen, so just refresh is enough
+        if (mounted) {
+          // Scroll to top or show success message
+          // The devices list will be refreshed above
+        }
       } else {
         showCustomToast(context, 'Failed to approve pairing', isError: true);
       }
@@ -233,31 +258,38 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
       _scannerController = null;
     }
 
+    // Add small delay for Android to ensure permissions are fully granted
+    if (Platform.isAndroid) {
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
     // Create new controller
-    // iOS: Keep original behavior (!Platform.isAndroid = true)
-    // Android: Changed to true to fix black screen (was false)
+    // Both iOS and Android: autoStart = true
     _scannerController = MobileScannerController(
       detectionSpeed: Platform.isAndroid
           ? DetectionSpeed.normal   // allow repeats so your 1-second confirm logic works
           : DetectionSpeed.noDuplicates,
       facing: CameraFacing.back,
       formats: Platform.isAndroid ? [BarcodeFormat.qrCode] : [],
-      autoStart: Platform.isAndroid ? true : (!Platform.isAndroid), // iOS: unchanged (true), Android: fixed (true)
+      autoStart: true, // Both platforms use autoStart
     );
 
+    // Store parent context before opening bottom sheet
+    final parentContext = context;
+    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _QRScannerBottomSheet(
+      builder: (bottomSheetContext) => _QRScannerBottomSheet(
         controller: _scannerController!,
         onScan: (String code) async {
-          debugPrint('📱 QR Code Scanned: $code');
-          debugPrint('📱 QR Code Length: ${code.length}');
+          debugPrint('📱 [QR Scanner] QR Code Scanned: $code');
+          debugPrint('📱 [QR Scanner] QR Code Length: ${code.length}');
 
-          // Close scanner first
-          if (mounted && Navigator.canPop(context)) {
-            Navigator.pop(context);
+          // Close scanner first (use bottom sheet context)
+          if (Navigator.canPop(bottomSheetContext)) {
+            Navigator.pop(bottomSheetContext);
           }
           
           // Wait a bit for the bottom sheet to close
@@ -278,9 +310,25 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
             _scannerController = null;
           }
 
-          // Process the QR code as a pairing token
+          // Process the QR code as a pairing token using parent context
           if (mounted) {
-            await _handlePairingToken(code);
+            debugPrint('📱 [QR Scanner] Calling _handlePairingToken with code: $code');
+            try {
+              await _handlePairingToken(code);
+              debugPrint('📱 [QR Scanner] _handlePairingToken completed');
+            } catch (e, stackTrace) {
+              debugPrint('❌ [QR Scanner] Error in _handlePairingToken: $e');
+              debugPrint('❌ [QR Scanner] Stack trace: $stackTrace');
+              if (mounted) {
+                showCustomToast(
+                  parentContext,
+                  'Failed to process QR code: ${e.toString()}',
+                  isError: true,
+                );
+              }
+            }
+          } else {
+            debugPrint('⚠️ [QR Scanner] Widget not mounted, skipping _handlePairingToken');
           }
         },
       ),
@@ -686,7 +734,47 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
   @override
   void initState() {
     super.initState();
-    // Controller auto-starts, scanner widget handles initialization
+    // For Android, explicitly start the scanner after widget is built
+    // iOS handles auto-start automatically
+    if (Platform.isAndroid) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            _startScannerForAndroid();
+          }
+        });
+      });
+    }
+  }
+
+  /// Explicitly start scanner for Android (needed for reliable camera initialization)
+  Future<void> _startScannerForAndroid() async {
+    if (!Platform.isAndroid) return;
+    
+    try {
+      // Try to start the scanner with retry logic
+      int retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          await widget.controller.start();
+          debugPrint('📱 Scanner started successfully (Android) - attempt ${retryCount + 1}');
+          return; // Success
+        } catch (e) {
+          retryCount++;
+          debugPrint('⚠️ Scanner start attempt $retryCount failed: $e');
+          
+          if (retryCount < maxRetries) {
+            await Future.delayed(Duration(milliseconds: 200 * retryCount));
+          } else {
+            debugPrint('❌ Failed to start scanner after $maxRetries attempts');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error starting scanner for Android: $e');
+    }
   }
 
   @override
@@ -791,11 +879,11 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
 
                     // If we have a pending code, check if it's the same
                     if (_pendingCode != null && _pendingCodeTime != null) {
-                      // If same code detected again, check if 1 second has passed
+                      // If same code detected again, check if 2 seconds have passed
                       if (_pendingCode == code) {
                         final timeDiff = now.difference(_pendingCodeTime!);
-                        if (timeDiff.inSeconds >= 1) {
-                          // 1 second has passed with same code - process it
+                        if (timeDiff.inSeconds >= 2) {
+                          // 2 seconds have passed with same code - process it
                           setState(() {
                             _isProcessing = true;
                             _isConfirming = false;
@@ -810,7 +898,7 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                             debugPrint('⚠️ Error stopping scanner: $e');
                           }
 
-                          debugPrint('📱 QR Code Scanned (after 1s delay): $code');
+                          debugPrint('📱 QR Code Scanned (after 2s delay): $code');
 
                           // Small delay to show processing state
                           await Future.delayed(const Duration(milliseconds: 300));
@@ -819,7 +907,7 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                           widget.onScan(code);
                           return;
                         }
-                        // Same code but less than 1 second - keep waiting
+                        // Same code but less than 2 seconds - keep waiting
                         // Show confirming state
                         if (!_isConfirming) {
                           setState(() {
@@ -844,7 +932,7 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                       _pendingCodeTime = now;
                       _isConfirming = true;
                     });
-                    debugPrint('📱 QR Code detected, waiting 1 second to confirm: $code');
+                    debugPrint('📱 QR Code detected, waiting 2 seconds to confirm: $code');
                   },
                     ),
                   ),

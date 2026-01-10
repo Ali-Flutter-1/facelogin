@@ -8,9 +8,15 @@ import 'package:camera/camera.dart';
 import 'package:facelogin/constant/constant.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/customWidgets/device_pairing_dialog.dart';
-import 'package:facelogin/screens/profile/profile_screen.dart';
+import 'package:get/get.dart';
+import 'package:facelogin/presentation/controllers/login_controller.dart';
+import 'package:facelogin/presentation/controllers/camera_controller.dart';
+import 'package:facelogin/screens/main/main_screen.dart';
 import 'package:facelogin/screens/recovery/recovery_phrase_dialog.dart';
+import 'package:facelogin/screens/recovery/recovery_screen.dart';
+import 'package:facelogin/screens/splash/splash_screen.dart';
 import 'package:facelogin/data/repositories/auth_repository.dart';
+import 'package:facelogin/core/services/device_service.dart';
 import 'package:facelogin/core/services/e2e_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +50,10 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
   int _retryCount = 0;
   static const int _maxRetries = 3;
   bool _showTryAgainButton = false;
+  bool _isRestartingStream = false;
+  String _livenessErrorMessage = ''; // Store liveness error message for display
+  DateTime? _lastStreamRestartTime;
+  bool _isNavigatingAway = false; // Flag to prevent camera access after navigation starts
 
   final _storage = const FlutterSecureStorage();
   String _statusMessage = '';
@@ -61,42 +71,23 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
   static const Duration _faceDetectionTimeout = Duration(seconds: 30);
 
   /// Derive device_public_key from stored SKd (for iOS reinstall verification)
+  /// GLOBAL RULE: Ensure device keypair exists and return public key
+  /// On every login attempt:
+  /// - Check if local keypair exists → use it
+  /// - If missing → generate new keypair and store it securely
+  /// - Always return the public key to send with login request
   Future<String?> _deriveDevicePublicKey() async {
     try {
-      final skdBase64 = await _storage.read(key: 'e2e_skd');
-      if (skdBase64 == null || skdBase64.isEmpty) {
-        debugPrint('🔐 [LOGIN] No local SKd found - skipping device_public_key');
-        return null;
+      final e2eService = E2EService();
+      final publicKey = await e2eService.ensureDeviceKeypairExists();
+      if (publicKey != null) {
+        debugPrint('🔐 [LOGIN] Device public key ready: ${publicKey.substring(0, 20)}...');
+      } else {
+        debugPrint('⚠️ [LOGIN] Failed to ensure device keypair exists');
       }
-      
-      debugPrint('🔐 [LOGIN] Local SKd exists - deriving device_public_key');
-      final seedBytes = base64Decode(skdBase64);
-      
-      // Reconstruct keypair from seed to get PKd
-      final domainParams = pc.ECCurve_secp256r1();
-      final keyGen = pc.ECKeyGenerator();
-      final keyParams = pc.ECKeyGeneratorParameters(domainParams);
-      final pcSecureRandom = pc.SecureRandom('Fortuna');
-      pcSecureRandom.seed(pc.KeyParameter(seedBytes.length >= 32 
-          ? Uint8List.fromList(seedBytes.sublist(0, 32))
-          : Uint8List.fromList([...seedBytes, ...List.filled(32 - seedBytes.length, 0)])));
-      keyGen.init(pc.ParametersWithRandom(keyParams, pcSecureRandom));
-      final pcKeyPair = keyGen.generateKeyPair();
-      final pcPkd = pcKeyPair.publicKey as pc.ECPublicKey;
-      
-      // Convert public key to bytes (65 bytes uncompressed: 0x04 + x + y)
-      final point = pcPkd.Q!;
-      final xBigInt = point.x!.toBigInteger()!;
-      final yBigInt = point.y!.toBigInteger()!;
-      final xBytes = _bigIntToBytes(xBigInt, 32);
-      final yBytes = _bigIntToBytes(yBigInt, 32);
-      final pkdBytes = Uint8List.fromList([0x04, ...xBytes, ...yBytes]);
-      
-      final pkdBase64 = base64Encode(pkdBytes);
-      debugPrint('🔐 [LOGIN] device_public_key derived successfully');
-      return pkdBase64;
+      return publicKey;
     } catch (e) {
-      debugPrint('🔐 [LOGIN] Failed to derive device_public_key: $e');
+      debugPrint('🔐 [LOGIN] Error deriving device public key: $e');
       return null;
     }
   }
@@ -281,10 +272,32 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
   void _startFaceDetectionStream() {
     if (_cameraController == null) return;
     if (_cameraController!.value.isStreamingImages) return;
+    if (_isRestartingStream) return; // Prevent multiple simultaneous restarts
+    if (_isNavigatingAway) return; // Don't start stream if navigating away
+    
+    // Debounce rapid restarts - wait at least 2 seconds between restarts
+    if (_lastStreamRestartTime != null) {
+      final timeSinceLastRestart = DateTime.now().difference(_lastStreamRestartTime!);
+      if (timeSinceLastRestart < const Duration(seconds: 2)) {
+        debugPrint("⚠️ Stream restart debounced - too soon since last restart");
+        return;
+      }
+    }
 
+    _isRestartingStream = true;
+    _lastStreamRestartTime = DateTime.now();
     _faceDetectionStartTime = DateTime.now();
 
     _cameraController!.startImageStream((CameraImage cameraImage) async {
+      // Check if we're navigating away - stop processing immediately
+      if (_isNavigatingAway || _cameraController == null) {
+        try {
+          await _cameraController?.stopImageStream();
+        } catch (_) {}
+        return;
+      }
+      
+      _isRestartingStream = false; // Reset flag once stream is active
       final now = DateTime.now();
 
       if (_lastProcessedFrameTime != null &&
@@ -298,7 +311,10 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         try {
           await _cameraController!.stopImageStream();
         } catch (_) {}
+        _isRestartingStream = false; // Reset flag before restart
         _faceDetectionStartTime = DateTime.now();
+        // Add delay before restart to prevent rapid restarts
+        await Future.delayed(const Duration(milliseconds: 500));
         if (mounted && !_isProcessing) _startFaceDetectionStream();
         return;
       }
@@ -525,6 +541,10 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
       }
 
       if (capturedImage != null) {
+        // Stop camera immediately after successful capture
+        _isNavigatingAway = true;
+        await _stopCameraStream();
+        
         setState(() {
           _statusMessage = 'Processing Face...';
           _subStatusMessage =
@@ -599,11 +619,48 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
       final base64Image = base64Encode(bytes);
       final dataUrl = "data:image/jpeg;base64,$base64Image";
       
-      // Create request body with device_public_key if available (iOS reinstall verification)
-      final Map<String, dynamic> requestBody = {"face_image": dataUrl};
+      // GLOBAL RULE: Always ensure keypair exists and send public key
+      // Get device ID (REQUIRED - fail if missing)
+      final deviceService = DeviceService();
+      String? deviceId;
+      try {
+        deviceId = await deviceService.getDeviceId();
+        if (deviceId == null || deviceId.isEmpty) {
+          setState(() {
+            _isProcessing = false;
+            _statusMessage = '';
+            _subStatusMessage = '';
+          });
+          showCustomToast(context, "Failed to retrieve device ID. Please try again.", isError: true);
+          debugPrint('❌ [LOGIN] Device ID is empty after retrieval');
+          return;
+        }
+        debugPrint('📱 [LOGIN] Device ID retrieved: ${deviceId.length > 8 ? deviceId.substring(0, 8) : deviceId}...');
+      } catch (e) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = '';
+          _subStatusMessage = '';
+        });
+        showCustomToast(context, "Failed to retrieve device ID. Please try again.", isError: true);
+        debugPrint('❌ [LOGIN] Failed to get device ID: $e');
+        return;
+      }
+      
+      final Map<String, dynamic> requestBody = {
+        "face_image": dataUrl,
+        "deviceId": deviceId, // REQUIRED (camelCase)
+      };
+      
+      debugPrint('📱 [LOGIN] Including deviceId in request');
+      
+      // Include device_public_key (required)
       final devicePublicKey = await _deriveDevicePublicKey();
       if (devicePublicKey != null) {
         requestBody["device_public_key"] = devicePublicKey;
+        debugPrint('🔐 [LOGIN] Including device_public_key in request (required)');
+      } else {
+        debugPrint('⚠️ [LOGIN] WARNING: Failed to get device_public_key');
       }
       final jsonBody = jsonEncode(requestBody);
 
@@ -632,15 +689,38 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         if (responseData != null &&
             responseData["access_token"] != null &&
             responseData["refresh_token"] != null) {
+          // Stop camera immediately after successful API response
+          _isNavigatingAway = true;
+          await _stopCameraStream();
+          
           // Use AuthRepository to handle token storage and E2E bootstrap
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
           
-          debugPrint('🔗 [LOGIN] Auth result - isSuccess: ${authResult.isSuccess}, isError: ${authResult.isError}, needsPairing: ${authResult.needsPairing}');
+          debugPrint('🔗 [LOGIN] Auth result - isSuccess: ${authResult.isSuccess}, isError: ${authResult.isError}, needsPairing: ${authResult.needsPairing}, requiresRecovery: ${authResult.requiresRecovery}');
           debugPrint('🔗 [LOGIN] Auth result error: ${authResult.error}');
           
-          // Check if pairing is required FIRST (before checking errors)
-          // This must be checked first because pairingRequired also sets error message
+          // Check if recovery is required FIRST (takes priority over pairing)
+          // This happens when is_public_key_matched = false (keys mismatch)
+          if (authResult.requiresRecovery) {
+            debugPrint('🔗 [LOGIN] Recovery required - navigating to recovery screen');
+            _isNavigatingAway = true; // Stop any polling
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+            });
+            // Navigate directly to recovery screen
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const RecoveryScreen()),
+              );
+            }
+            return;
+          }
+          
+          // Check if pairing is required (before checking errors)
+          // This must be checked after recovery because pairingRequired also sets error message
           if (authResult.needsPairing) {
             debugPrint('🔗 [LOGIN] Pairing required - showing QR code dialog');
             setState(() {
@@ -715,13 +795,23 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               barrierDismissible: false,
               builder: (dialogContext) => RecoveryPhraseDialog(
                 recoveryPhrase: authResult.recoveryPhrase!,
-                onContinue: () {
+                onContinue: () async {
                   Navigator.pop(dialogContext);
                   if (mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                    );
+                    // Stop camera and dispose before navigation
+                    _isNavigatingAway = true;
+                    await _stopCameraStream();
+                    // Delete GetX controllers to prevent camera from staying active
+                    try {
+                      Get.delete<LoginController>();
+                      Get.delete<FaceLoginCameraController>();
+                    } catch (_) {}
+                    if (mounted) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (_) => const MainScreen()),
+                      );
+                    }
                   }
                 },
               ),
@@ -732,9 +822,17 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             await Future.delayed(const Duration(milliseconds: 500));
 
             if (!mounted) return;
+            // Stop camera and dispose before navigation
+            _isNavigatingAway = true;
+            await _stopCameraStream();
+            // Delete GetX controllers to prevent camera from staying active
+            try {
+              Get.delete<LoginController>();
+              Get.delete<FaceLoginCameraController>();
+            } catch (_) {}
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              MaterialPageRoute(builder: (_) => const MainScreen()),
             );
           }
           return;
@@ -761,6 +859,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         });
 
         String errorCode = "Face recognition failed. Please try again.";
+        bool isLivenessError = false;
         try {
           final errorData = jsonDecode(response.body);
           if (errorData is Map && errorData.containsKey('error')) {
@@ -770,6 +869,15 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               errorCode = errorData['error'].toString();
             }
           }
+          // Check for liveness-related errors
+          final errorLower = errorCode.toLowerCase();
+          if (errorLower.contains('liveness') || 
+              errorLower.contains('spoof') || 
+              errorLower.contains('fake') ||
+              errorLower.contains('not live') ||
+              errorLower.contains('failed liveness')) {
+            isLivenessError = true;
+          }
         } catch (_) {}
 
         showCustomToast(context, errorCode, isError: true);
@@ -778,7 +886,13 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           _faceDetected = false;
           _faceGuidanceMessage = '';
         });
-        _handleRetry();
+        
+        // Show retry button immediately for liveness failures
+        if (isLivenessError) {
+          _handleLivenessFailure(errorCode);
+        } else {
+          _handleRetry();
+        }
       }
     } catch (e) {
       setState(() {
@@ -835,11 +949,48 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
       final base64Image = base64Encode(bytes);
       final dataUrl = "data:image/jpeg;base64,$base64Image";
       
-      // Create request body with device_public_key if available (iOS reinstall verification)
-      final Map<String, dynamic> requestBodyAndroid = {"face_image": dataUrl};
+      // GLOBAL RULE: Always ensure keypair exists and send public key
+      // Get device ID (REQUIRED - fail if missing)
+      final deviceServiceAndroid = DeviceService();
+      String? deviceIdAndroid;
+      try {
+        deviceIdAndroid = await deviceServiceAndroid.getDeviceId();
+        if (deviceIdAndroid == null || deviceIdAndroid.isEmpty) {
+          setState(() {
+            _isProcessing = false;
+            _statusMessage = '';
+            _subStatusMessage = '';
+          });
+          showCustomToast(context, "Failed to retrieve device ID. Please try again.", isError: true);
+          debugPrint('❌ [LOGIN] Device ID is empty after retrieval');
+          return;
+        }
+        debugPrint('📱 [LOGIN] Device ID retrieved: ${deviceIdAndroid.length > 8 ? deviceIdAndroid.substring(0, 8) : deviceIdAndroid}...');
+      } catch (e) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = '';
+          _subStatusMessage = '';
+        });
+        showCustomToast(context, "Failed to retrieve device ID. Please try again.", isError: true);
+        debugPrint('❌ [LOGIN] Failed to get device ID: $e');
+        return;
+      }
+      
+      final Map<String, dynamic> requestBodyAndroid = {
+        "face_image": dataUrl,
+        "deviceId": deviceIdAndroid, // REQUIRED (camelCase)
+      };
+      
+      debugPrint('📱 [LOGIN] Including deviceId in request');
+      
+      // Include device_public_key (required)
       final devicePublicKeyAndroid = await _deriveDevicePublicKey();
       if (devicePublicKeyAndroid != null) {
         requestBodyAndroid["device_public_key"] = devicePublicKeyAndroid;
+        debugPrint('🔐 [LOGIN] Including device_public_key in request (required)');
+      } else {
+        debugPrint('⚠️ [LOGIN] WARNING: Failed to get device_public_key');
       }
       final jsonBody = jsonEncode(requestBodyAndroid);
 
@@ -868,15 +1019,38 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         if (responseData != null &&
             responseData["access_token"] != null &&
             responseData["refresh_token"] != null) {
+          // Stop camera immediately after successful API response
+          _isNavigatingAway = true;
+          await _stopCameraStream();
+          
           // Use AuthRepository to handle token storage and E2E bootstrap
           final authRepo = AuthRepository();
           final authResult = await authRepo.loginOrRegister(bytes);
           
-          debugPrint('🔗 [LOGIN] Auth result - isSuccess: ${authResult.isSuccess}, isError: ${authResult.isError}, needsPairing: ${authResult.needsPairing}');
+          debugPrint('🔗 [LOGIN] Auth result - isSuccess: ${authResult.isSuccess}, isError: ${authResult.isError}, needsPairing: ${authResult.needsPairing}, requiresRecovery: ${authResult.requiresRecovery}');
           debugPrint('🔗 [LOGIN] Auth result error: ${authResult.error}');
           
-          // Check if pairing is required FIRST (before checking errors)
-          // This must be checked first because pairingRequired also sets error message
+          // Check if recovery is required FIRST (takes priority over pairing)
+          // This happens when is_public_key_matched = false (keys mismatch)
+          if (authResult.requiresRecovery) {
+            debugPrint('🔗 [LOGIN] Recovery required - navigating to recovery screen');
+            _isNavigatingAway = true; // Stop any polling
+            setState(() {
+              _isProcessing = false;
+              _faceDetected = false;
+            });
+            // Navigate directly to recovery screen
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const RecoveryScreen()),
+              );
+            }
+            return;
+          }
+          
+          // Check if pairing is required (before checking errors)
+          // This must be checked after recovery because pairingRequired also sets error message
           if (authResult.needsPairing) {
             debugPrint('🔗 [LOGIN] Pairing required - showing QR code dialog');
             setState(() {
@@ -951,13 +1125,23 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               barrierDismissible: false,
               builder: (dialogContext) => RecoveryPhraseDialog(
                 recoveryPhrase: authResult.recoveryPhrase!,
-                onContinue: () {
+                onContinue: () async {
                   Navigator.pop(dialogContext);
                   if (mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                    );
+                    // Stop camera and dispose before navigation
+                    _isNavigatingAway = true;
+                    await _stopCameraStream();
+                    // Delete GetX controllers to prevent camera from staying active
+                    try {
+                      Get.delete<LoginController>();
+                      Get.delete<FaceLoginCameraController>();
+                    } catch (_) {}
+                    if (mounted) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (_) => const MainScreen()),
+                      );
+                    }
                   }
                 },
               ),
@@ -968,9 +1152,17 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             await Future.delayed(const Duration(milliseconds: 500));
 
             if (!mounted) return;
+            // Stop camera and dispose before navigation
+            _isNavigatingAway = true;
+            await _stopCameraStream();
+            // Delete GetX controllers to prevent camera from staying active
+            try {
+              Get.delete<LoginController>();
+              Get.delete<FaceLoginCameraController>();
+            } catch (_) {}
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              MaterialPageRoute(builder: (_) => const MainScreen()),
             );
           }
           return;
@@ -997,6 +1189,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
         });
 
         String errorCode = "Face recognition failed. Please try again.";
+        bool isLivenessError = false;
         try {
           final errorData = jsonDecode(response.body);
           if (errorData is Map && errorData.containsKey('error')) {
@@ -1006,6 +1199,15 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
               errorCode = errorData['error'].toString();
             }
           }
+          // Check for liveness-related errors
+          final errorLower = errorCode.toLowerCase();
+          if (errorLower.contains('liveness') || 
+              errorLower.contains('spoof') || 
+              errorLower.contains('fake') ||
+              errorLower.contains('not live') ||
+              errorLower.contains('failed liveness')) {
+            isLivenessError = true;
+          }
         } catch (_) {}
 
         showCustomToast(context, errorCode, isError: true);
@@ -1014,7 +1216,13 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           _faceDetected = false;
           _faceGuidanceMessage = '';
         });
-        _handleRetry();
+        
+        // Show retry button immediately for liveness failures
+        if (isLivenessError) {
+          _handleLivenessFailure(errorCode);
+        } else {
+          _handleRetry();
+        }
       }
     } catch (e) {
       setState(() {
@@ -1073,6 +1281,24 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
     }
   }
 
+  /// Handle liveness check failure - show retry button immediately
+  void _handleLivenessFailure(String errorMessage) {
+    debugPrint("🔴 Liveness check failed: $errorMessage");
+    
+    if (mounted) {
+      setState(() {
+        _faceDetected = false;
+        _isProcessing = false;
+        _hasAutoStarted = false;
+        _showTryAgainButton = true;
+        _livenessErrorMessage = errorMessage;
+        _statusMessage = 'Liveness Check Failed';
+        _subStatusMessage = 'Please ensure you are in good lighting and look directly at the camera';
+        _faceGuidanceMessage = '';
+        _faceDetectionStartTime = DateTime.now();
+      });
+    }
+  }
 
   void _resetForNextAttempt() {
     if (!mounted) return;
@@ -1103,6 +1329,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
       _statusMessage = '';
       _subStatusMessage = '';
       _faceGuidanceMessage = '';
+      _livenessErrorMessage = ''; // Clear liveness error
       _faceDetectionStartTime = DateTime.now();
     });
 
@@ -1114,6 +1341,10 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
   /// Handle device pairing flow when E2E is set up on another device
   Future<void> _handleDevicePairing(BuildContext context, AuthRepository authRepo) async {
     try {
+      // Reset navigation flag so polling can work
+      // (it may have been set during image capture)
+      _isNavigatingAway = false;
+      
       final accessToken = await authRepo.getAccessToken();
       if (accessToken == null) {
         showCustomToast(context, 'Session expired. Please try again.', isError: true);
@@ -1167,7 +1398,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             if (mounted) {
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                MaterialPageRoute(builder: (_) => const MainScreen()),
               );
             }
           },
@@ -1175,6 +1406,11 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             // Handle QR code regeneration
             debugPrint('🔄 [PAIRING] QR code regenerated - new OTP: $newOtp');
             // The dialog will update itself, no action needed here
+          },
+          onRecovery: () {
+            // Stop polling when user navigates to recovery
+            debugPrint('🔐 [PAIRING] User navigating to recovery - stopping polling');
+            _isNavigatingAway = true;
           },
         ),
       );
@@ -1201,16 +1437,51 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
     const pollInterval = Duration(seconds: 2);
     int attempt = 0;
 
-    // Poll indefinitely until pairing is approved or user cancels
-    while (mounted) {
+    // Poll indefinitely until pairing is approved or user cancels/navigates away
+    while (mounted && !_isNavigatingAway) {
       await Future.delayed(pollInterval);
       attempt++;
 
-      if (!mounted) return;
+      // Check flag immediately after delay and before API call
+      if (!mounted || _isNavigatingAway) {
+        debugPrint('🔐 [PAIRING] Polling stopped - navigating away or widget unmounted');
+        return;
+      }
 
       try {
         // Poll bootstrap API - it will return wrappedKu once pairing is approved
-        final bootstrapResult = await e2eService.bootstrapForLogin(accessToken);
+        // Add timeout to prevent long-running calls when user navigates away
+        E2EBootstrapResult bootstrapResult;
+        try {
+          bootstrapResult = await e2eService.bootstrapForLogin(accessToken)
+              .timeout(
+                const Duration(seconds: 10),
+                onTimeout: () {
+                  // If navigating away, return a result that stops polling
+                  if (_isNavigatingAway) {
+                    debugPrint('🔐 [PAIRING] Bootstrap call timed out - user navigated away');
+                    return E2EBootstrapResult.pairingRequired('Polling stopped');
+                  }
+                  debugPrint('🔐 [PAIRING] Bootstrap call timed out after 10 seconds');
+                  return E2EBootstrapResult.pairingRequired('Bootstrap call timed out');
+                },
+              );
+        } on TimeoutException catch (e) {
+          debugPrint('🔐 [PAIRING] Bootstrap timeout exception: $e');
+          // Check if we're navigating away - if so, stop polling
+          if (_isNavigatingAway) {
+            debugPrint('🔐 [PAIRING] Polling stopped due to timeout while navigating away');
+            return;
+          }
+          // Otherwise, continue polling (network might be slow)
+          continue;
+        }
+        
+        // Check flag again after API call completes
+        if (!mounted || _isNavigatingAway) {
+          debugPrint('🔐 [PAIRING] Polling stopped after API call - navigating away');
+          return;
+        }
 
         if (bootstrapResult.isSuccess) {
           // Pairing approved and wrappedKu received!
@@ -1297,12 +1568,18 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
             if (mounted) {
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                MaterialPageRoute(builder: (_) => const MainScreen()),
               );
             }
           }
           return;
         } else if (bootstrapResult.needsPairing) {
+          // Check flag before continuing - if user navigated away, stop immediately
+          if (!mounted || _isNavigatingAway) {
+            debugPrint('🔐 [PAIRING] Polling stopped - user navigated away during pairing wait');
+            return;
+          }
+          
           // Still waiting for approval - continue polling indefinitely
           if (attempt % 30 == 0) { // Log every 60 seconds (30 attempts * 2 seconds)
             debugPrint('⏳ Still waiting for pairing approval... (attempt $attempt, ~${attempt * 2}s elapsed)');
@@ -1340,7 +1617,23 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
           continue;
         }
       } catch (e) {
+        // Check flag immediately on error - if user navigated away, stop immediately
+        if (!mounted || _isNavigatingAway) {
+          debugPrint('🔐 [PAIRING] Polling stopped due to error while navigating away: $e');
+          return;
+        }
+        
         debugPrint('❌ Polling error: $e');
+        
+        // Add a small delay before retrying to avoid hammering the server
+        await Future.delayed(const Duration(seconds: 1));
+        
+        // Check flag again after delay
+        if (!mounted || _isNavigatingAway) {
+          debugPrint('🔐 [PAIRING] Polling stopped after error delay - navigating away');
+          return;
+        }
+        
         // Continue polling in case it's a temporary network error
         continue;
       }
@@ -1357,10 +1650,28 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
     }
   }
 
+  Future<void> _stopCameraStream() async {
+    try {
+      if (_cameraController != null) {
+        if (_cameraController!.value.isStreamingImages) {
+          await _cameraController!.stopImageStream();
+          debugPrint("🛑 Camera stream stopped");
+        }
+        // Fully dispose the camera controller
+        await _cameraController!.dispose();
+        _cameraController = null;
+        debugPrint("🛑 Camera controller fully disposed");
+      }
+    } catch (e) {
+      debugPrint("⚠️ Error stopping camera: $e");
+    }
+  }
+
   @override
   void dispose() {
+    // Stop camera stream and dispose before disposing widget
+    _stopCameraStream();
     _pulseController.dispose();
-    _cameraController?.dispose();
     _faceDetector.close();
     super.dispose();
   }
@@ -1481,15 +1792,17 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                           ? (_subStatusMessage.isNotEmpty ? _subStatusMessage : 'Processing your face...')
                           : _faceGuidanceMessage.isNotEmpty
                           ? _faceGuidanceMessage
+                          : _showTryAgainButton && _livenessErrorMessage.isNotEmpty
+                          ? _subStatusMessage
                           : _showTryAgainButton
-                          ? "Center your face and look at the camera for 5-6 s we are hashing your vector and creating your account"
+                          ? _subStatusMessage.isNotEmpty ? _subStatusMessage : "Center your face and look at the camera"
                           : "Center your face and look at the camera for 5-6 s we are hashing your vector and creating your account",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 15,
                         fontFamily: 'OpenSans',
                         fontWeight: FontWeight.w500,
-                        color: _faceGuidanceMessage.isNotEmpty
+                        color: _faceGuidanceMessage.isNotEmpty || (_showTryAgainButton && _livenessErrorMessage.isNotEmpty)
                             ? Colors.orange.withValues(alpha: 0.9)
                             : Colors.white.withValues(alpha: 0.8),
                         letterSpacing: 0.2,
@@ -1500,6 +1813,45 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
 
                   const SizedBox(height: 20),
 
+                  // Show liveness error message prominently
+                  if (_showTryAgainButton && _livenessErrorMessage.isNotEmpty) ...[
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.red.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.orange,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _livenessErrorMessage,
+                              style: const TextStyle(
+                                fontFamily: 'OpenSans',
+                                fontSize: 13,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  if (!_showTryAgainButton)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                       child: Text(
@@ -1517,12 +1869,19 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                   ),
 
                   if (_showTryAgainButton && !_isProcessing) ...[
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 20),
                     InkWell(
-                      onTap: _restartProcess,
+                      onTap: () {
+                        // Navigate to splash screen on Try Again
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SplashScreen()),
+                          (route) => false,
+                        );
+                      },
                       borderRadius: BorderRadius.circular(16),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [
@@ -1532,6 +1891,13 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
                             ],
                           ),
                           borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: const Text(
                           "Try Again",

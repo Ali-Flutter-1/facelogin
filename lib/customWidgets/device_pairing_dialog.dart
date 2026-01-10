@@ -20,6 +20,7 @@ class DevicePairingDialog extends StatefulWidget {
   final VoidCallback? onCancel;
   final VoidCallback? onApproved; // Called when pairing is approved (from parent polling)
   final Function(String newOtp, String? newPairingToken)? onRegenerate; // Called when QR code is regenerated
+  final VoidCallback? onRecovery; // Called when user navigates to recovery screen
 
   const DevicePairingDialog({
     Key? key,
@@ -28,6 +29,7 @@ class DevicePairingDialog extends StatefulWidget {
     this.onCancel,
     this.onApproved,
     this.onRegenerate,
+    this.onRecovery,
   }) : super(key: key);
 
   @override
@@ -142,8 +144,8 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        widget.onCancel?.call();
-        return true;
+        // Disable back button - user must use Cancel button
+        return false;
       },
       child: Dialog(
         backgroundColor: Colors.transparent,
@@ -320,6 +322,7 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
               CustomButton(
                 text: 'Recover Account',
                 onPressed: () {
+                  widget.onRecovery?.call(); // Notify parent to stop polling
                   Navigator.pop(context); // Close pairing dialog
                   Navigator.push(
                     context,

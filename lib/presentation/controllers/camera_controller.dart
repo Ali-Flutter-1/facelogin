@@ -267,10 +267,30 @@ class FaceLoginCameraController extends GetxController
   VoidCallback? onFaceDetected;
   VoidCallback? onRetryNeeded;
 
+  /// Stop camera stream and release resources
+  Future<void> stopCamera() async {
+    try {
+      if (_cameraController != null) {
+        if (_cameraController!.value.isStreamingImages) {
+          await _cameraController!.stopImageStream();
+          debugPrint("🛑 Camera stream stopped");
+        }
+        // Fully dispose the camera controller
+        await _cameraController!.dispose();
+        _cameraController = null;
+        isCameraInitialized.value = false;
+        debugPrint("🛑 Camera controller disposed");
+      }
+    } catch (e) {
+      debugPrint("⚠️ Error stopping camera: $e");
+    }
+  }
+
   @override
   void onClose() {
+    // Stop camera stream and dispose before closing
+    stopCamera();
     _pulseController.dispose();
-    _cameraController?.dispose();
     _faceDetector.close();
     super.onClose();
   }

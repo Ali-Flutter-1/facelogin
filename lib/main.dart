@@ -1,7 +1,11 @@
 import 'package:facelogin/screens/splash/splash_screen.dart';
+import 'package:facelogin/core/services/token_expiration_service.dart';
+import 'package:facelogin/core/services/http_interceptor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +16,10 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
+  // Set navigator keys for global services
+  TokenExpirationService.setNavigatorKey(navigatorKey);
+  HttpInterceptorService.setNavigatorKey(navigatorKey);
+
   runApp(const MyApp());
 }
 
@@ -21,6 +29,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
+      navigatorKey: navigatorKey,
       useInheritedMediaQuery: true,
       debugShowCheckedModeBanner: false,
       title: 'Valyd',
@@ -54,3 +63,4 @@ class MyApp extends StatelessWidget {
 
 
 //  flutter run -d 00008030-000224D10C86402E --profile
+// flutter run -d 510223E5-B19D-43BF-B71B-30854FDA9811

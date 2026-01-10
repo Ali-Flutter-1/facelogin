@@ -6,7 +6,9 @@ import 'package:cryptography/cryptography.dart' as crypto show PublicKey, KeyPai
 import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/services/device_service.dart';
 import 'package:facelogin/core/services/recovery_key_service.dart';
+import 'package:facelogin/core/services/http_interceptor_service.dart';
 import 'package:facelogin/data/services/pairing_service.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -46,6 +48,88 @@ class E2EService {
   final DeviceService _deviceService = DeviceService();
   final http.Client _client = http.Client();
 
+  /// Ensure device keypair exists - generate and store if missing
+  /// GLOBAL RULE: Called on every login attempt
+  /// Returns the public key (PKd) in base64 format
+  Future<String?> ensureDeviceKeypairExists() async {
+    try {
+      // Check if SKd exists
+      final skdBase64 = await _storage.read(key: _skdKey);
+      
+      if (skdBase64 != null && skdBase64.isNotEmpty) {
+        // Keypair exists - derive public key from existing SKd
+        debugPrint('🔐 [E2E] Device keypair exists - deriving public key');
+        final seedBytes = base64Decode(skdBase64);
+        
+        // Reconstruct keypair from seed to get PKd
+        final domainParams = ECCurve_secp256r1();
+        final keyGen = ECKeyGenerator();
+        final keyParams = ECKeyGeneratorParameters(domainParams);
+        final pcSecureRandom = pc.SecureRandom('Fortuna');
+        pcSecureRandom.seed(KeyParameter(seedBytes.length >= 32 
+            ? Uint8List.fromList(seedBytes.sublist(0, 32))
+            : Uint8List.fromList([...seedBytes, ...List.filled(32 - seedBytes.length, 0)])));
+        keyGen.init(ParametersWithRandom(keyParams, pcSecureRandom));
+        final pcKeyPair = keyGen.generateKeyPair();
+        final pcPkd = pcKeyPair.publicKey as ECPublicKey;
+        
+        // Extract public key bytes
+        final pkdBytes = _ecPublicKeyToBytes(pcPkd);
+        final pkdBase64 = base64Encode(pkdBytes);
+        debugPrint('🔐 [E2E] Public key derived from existing keypair');
+        return pkdBase64;
+      } else {
+        // No keypair exists - generate new one and store it
+        debugPrint('🔐 [E2E] No device keypair found - generating new keypair');
+        
+        // Generate P-256 keypair
+        final domainParams = ECCurve_secp256r1();
+        final keyGen = ECKeyGenerator();
+        final keyParams = ECKeyGeneratorParameters(domainParams);
+        
+        // Generate 32-byte random seed
+        final seed = Uint8List(32);
+        final secureRandom = Random.secure();
+        for (int i = 0; i < 32; i++) {
+          seed[i] = secureRandom.nextInt(256);
+        }
+        
+        // Create keypair from seed
+        final pcSecureRandom = pc.SecureRandom('Fortuna');
+        pcSecureRandom.seed(KeyParameter(seed));
+        keyGen.init(ParametersWithRandom(keyParams, pcSecureRandom));
+        final pcKeyPair = keyGen.generateKeyPair();
+        final pcPkd = pcKeyPair.publicKey as ECPublicKey;
+        final pcSkd = pcKeyPair.privateKey as ECPrivateKey;
+        
+        // Store the seed (SKd) securely
+        final skdBase64New = base64Encode(seed);
+        await _storage.write(key: _skdKey, value: skdBase64New);
+        debugPrint('🔐 [E2E] New device keypair generated and stored');
+        
+        // Extract public key bytes
+        final pkdBytes = _ecPublicKeyToBytes(pcPkd);
+        final pkdBase64 = base64Encode(pkdBytes);
+        debugPrint('🔐 [E2E] Public key extracted from new keypair');
+        return pkdBase64;
+      }
+    } catch (e) {
+      debugPrint('🔐 [E2E] Error ensuring device keypair: $e');
+      return null;
+    }
+  }
+
+  /// Helper method to make HTTP request and check for 401 errors
+  /// Automatically handles 401 by logging out (preserves E2E keys)
+  Future<http.Response> _makeRequest(Future<http.Response> request) async {
+    final response = await request;
+    // Check for 401 and handle logout (preserves E2E keys)
+    if (response.statusCode == 401) {
+      await handle401IfNeeded(response, null);
+    }
+    return response;
+  }
+
   // Storage keys for secure keychain/keystore
   static const String _skdKey = 'e2e_skd'; // Device private key (P-256)
   static const String _kuKey = 'e2e_ku_session'; // User master key (AES-256, session only)
@@ -57,24 +141,26 @@ class E2EService {
   Future<E2EBootstrapResult> bootstrapForRegistration(String accessToken) async {
     try {
       final deviceId = await _deviceService.getDeviceId();
-      print('🔐 E2E Device ID: $deviceId');
+      // print('🔐 E2E Device ID: $deviceId');
 
       // Step 2.1: Call /e2e/bootstrap with deviceId
       final requestBody = jsonEncode({'deviceId': deviceId});
-      print('🔐 E2E Bootstrap Request: POST ${ApiConstants.e2eBootstrap}');
-      print('🔐 E2E Bootstrap Request Body: $requestBody');
+      // print('🔐 E2E Bootstrap Request: POST ${ApiConstants.e2eBootstrap}');
+      // print('🔐 E2E Bootstrap Request Body: $requestBody');
       
-      final bootstrapResponse = await _client.post(
-        Uri.parse(ApiConstants.e2eBootstrap),
-        headers: {
-          'Content-Type': ApiConstants.contentTypeJson,
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: requestBody,
-      ).timeout(const Duration(seconds: 30));
+      final bootstrapResponse = await _makeRequest(
+        _client.post(
+          Uri.parse(ApiConstants.e2eBootstrap),
+          headers: {
+            'Content-Type': ApiConstants.contentTypeJson,
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: requestBody,
+        ).timeout(const Duration(seconds: 30)),
+      );
 
-      print('🔐 E2E Bootstrap Response Status: ${bootstrapResponse.statusCode}');
-      print('🔐 E2E Bootstrap Response Body: ${bootstrapResponse.body}');
+      // print('🔐 E2E Bootstrap Response Status: ${bootstrapResponse.statusCode}');
+      // print('🔐 E2E Bootstrap Response Body: ${bootstrapResponse.body}');
       
       Map<String, dynamic> bootstrapData;
       try {
@@ -85,6 +171,10 @@ class E2EService {
       }
       
       // Check if error is "E2E_NOT_SETUP" - this is expected for new registration
+      // For new user registration, we should proceed even if bootstrap returns certain errors
+      // CRITICAL: For registration flow, we ALWAYS proceed to bootstrap/complete unless E2E is already set up with matching local keys
+      bool shouldProceedWithRegistration = true;
+      
       if (bootstrapResponse.statusCode != 200) {
         final error = bootstrapData['error'];
         String errorCode = '';
@@ -97,43 +187,67 @@ class E2EService {
           errorMessage = error;
         }
         
-        // If error is "E2E_NOT_SETUP", this is expected - proceed with registration
-        if (errorCode == 'E2E_NOT_SETUP' || errorMessage.contains('E2E encryption is not set up')) {
-          print('🔐 E2E Status: Not Setup (expected for new registration)');
-          // Continue with key generation - this is not an error
-        } else {
-          print('🔐 E2E Status: Error - ${errorMessage.isNotEmpty ? errorMessage : errorCode}');
-          return E2EBootstrapResult.error(
-            errorMessage.isNotEmpty ? errorMessage : (errorCode.isNotEmpty ? errorCode : 'Bootstrap failed')
-          );
-        }
+        // Normalize error message for comparison
+        final normalizedError = errorMessage.toLowerCase();
+        
+        // If error is "E2E_NOT_SETUP" or indicates E2E is not set up, proceed with registration
+        // Also check for errors that suggest calling bootstrap/complete (which we're about to do)
+        final isE2ENotSetup = errorCode == 'E2E_NOT_SETUP' || 
+                            errorMessage.contains('E2E encryption is not set up') ||
+                            normalizedError.contains('e2e') && normalizedError.contains('not set up') ||
+                            normalizedError.contains('bootstrap') && normalizedError.contains('complete');
+        
+        // For new user registration, always proceed with registration regardless of bootstrap error
+        // The bootstrap call is just checking status - for new users, we know E2E is not set up
+        // We'll proceed to bootstrap/complete which will actually set up E2E
+        // print('🔐 E2E Status: Bootstrap returned error (status: ${bootstrapResponse.statusCode})');
+        // print('🔐 E2E Status: Error code: $errorCode, message: $errorMessage');
+        print('🔐 E2E Status: Proceeding with registration - bootstrap/complete will set up E2E');
+        shouldProceedWithRegistration = true; // Always proceed for registration flow
       } else {
         // Status 200 - check if E2E is already set up
         final data = bootstrapData['data'];
-        if (bootstrapData['e2e_setup'] == true || (data != null && data is Map && data['wrappedKu'] != null)) {
-          print('🔐 E2E Status: Already Setup');
-          // Check if we have SKd locally - if not, skip E2E (can't decrypt without matching key)
+        final e2eSetup = bootstrapData['e2e_setup'];
+        final hasWrappedKu = data != null && data is Map && data['wrappedKu'] != null;
+        
+        // print('🔐 E2E Status: Bootstrap returned 200 - e2e_setup: $e2eSetup, hasWrappedKu: $hasWrappedKu');
+        // print('🔐 E2E Status: Data structure: ${data?.runtimeType}, data keys: ${data is Map ? (data as Map).keys.toList() : 'N/A'}');
+        
+        // Only skip registration if E2E is explicitly set up AND we have matching local keys
+        if (e2eSetup == true || hasWrappedKu) {
+          // print('🔐 E2E Status: E2E appears to be set up on server');
+          // Check if we have SKd locally - if not, proceed with registration anyway (Android reinstall scenario)
           final hasLocalSkd = await _storage.read(key: _skdKey);
-          print('🔐 E2E Status: Checking local SKd - exists: ${hasLocalSkd != null && hasLocalSkd.isNotEmpty} (length: ${hasLocalSkd?.length ?? 0})');
+          // print('🔐 E2E Status: Checking local SKd - exists: ${hasLocalSkd != null && hasLocalSkd.isNotEmpty} (length: ${hasLocalSkd?.length ?? 0})');
           if (hasLocalSkd != null && hasLocalSkd.isNotEmpty) {
-            // We have SKd, try to recover
+            // We have SKd, try to recover (this is for existing device, not new registration)
             print('🔐 E2E Status: Local SKd found - attempting recovery');
             return await _recoverKeysForExistingDevice(accessToken, deviceId, bootstrapData);
           } else {
             // Server says E2E is active, but we don't have SKd locally
             // This happens when app is reinstalled or keys were cleared
-            // Can't decrypt server's wrappedKu without matching SKd
-            // Can't re-register because server returns 409 "already_exists"
-            // Solution: Skip E2E for this session
-            print('🔐 E2E Status: Server active but no local SKd - skipping E2E (app reinstalled/keys cleared)');
-            return E2EBootstrapResult.error('E2E keys mismatch - app reinstalled, E2E disabled for this session');
+            // For registration flow, we should still proceed to bootstrap/complete
+            // The server will handle the conflict (409 already_exists) if needed
+            // print('🔐 E2E Status: Server active but no local SKd - proceeding with registration anyway');
+            // print('🔐 E2E Status: This is registration flow - will attempt bootstrap/complete');
+            shouldProceedWithRegistration = true; // Proceed anyway for registration
           }
         } else {
-          print('🔐 E2E Status: Not Setup');
+          // print('🔐 E2E Status: Not Setup - proceeding with registration');
+          shouldProceedWithRegistration = true;
         }
+      }
+      
+      // CRITICAL: For registration flow, ALWAYS proceed to key generation and bootstrap/complete
+      // This ensures bootstrap/complete is called even if bootstrap response structure is unexpected
+      if (!shouldProceedWithRegistration) {
+        print('🔐 E2E Status: ⚠️ Registration flow blocked - this should not happen');
+        return E2EBootstrapResult.error('E2E setup already exists with matching keys');
       }
 
       // Step 2.3: Generate Keys
+      // print('🔐 E2E Registration: Starting key generation and bootstrap/complete call');
+      // print('🔐 E2E Registration: This call MUST complete for registration to succeed');
       
       // Generate P-256 keypair (PKd, SKd) using pointycastle
       // Use seed-based approach: generate random seed, create keypair from seed, store seed
@@ -198,29 +312,51 @@ class E2EService {
       final prefs = await SharedPreferences.getInstance();
       final credentialId = prefs.getString('credential_id');
       
+      // Encrypt recovery phrase with Ku using AES-GCM
+      final recoveryPhraseBytes = utf8.encode(recoveryPhrase);
+      final encryptedRecoveryPhrase = await _encryptDataWithKu(ku, recoveryPhraseBytes);
+      final recoveryPhraseEncoded = base64Encode(encryptedRecoveryPhrase);
+      
+      print('🔐 Recovery phrase encrypted with Ku: ${recoveryPhraseEncoded.length} chars');
+      
+      // Verify recovery phrase is ready to send
+      if (recoveryPhraseEncoded.isEmpty) {
+        print('🔐 ⚠️ ERROR: Recovery phrase encoded is empty - cannot proceed');
+        return E2EBootstrapResult.error('Failed to encrypt recovery phrase');
+      }
+      
+      print('🔐 ✅ Recovery phrase ready to send in bootstrap/complete (encrypted with Ku)');
+      
+      // For registration (new user), send all fields including recovery phrase and frontend_type
       final completeRequestBody = jsonEncode({
         'deviceId': deviceId,
         'PKd': pkdBase64,
         'wrappedKu': wrappedKuDeviceBase64, // Wrapped with device keys (for normal login)
         'wrappedKuRecovery': wrappedKuRecoveryBase64, // Wrapped with recovery key (frontend generated)
-        'recoveryPhrases': recoveryPhrase, // Recovery phrase - backend will hash and store
+        'recoveryPhrases': recoveryPhrase, // Plain text recovery phrase (for backend hashing)
+        'recoveryPhraseEncoded': recoveryPhraseEncoded, // Recovery phrase encrypted with Ku - backend will store
+        'frontend_type': 'register', // Indicates this is a registration flow
         if (credentialId != null) 'credentialId': credentialId,
       });
       
       print('🔐 E2E Bootstrap Complete Request: POST ${ApiConstants.e2eBootstrapComplete}');
-      print('🔐 E2E Bootstrap Complete Request Body: $completeRequestBody');
+      print('🔐 E2E Bootstrap Complete Request Body (length: ${completeRequestBody.length}): $completeRequestBody');
+      print('🔐 ✅ CONFIRMED: recoveryPhraseEncoded is included in bootstrap/complete request');
+      print('🔐 E2E Registration: Calling bootstrap/complete API');
       
-      final completeResponse = await _client.post(
-        Uri.parse(ApiConstants.e2eBootstrapComplete),
-        headers: {
-          'Content-Type': ApiConstants.contentTypeJson,
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: completeRequestBody,
-      ).timeout(const Duration(seconds: 30));
+      final completeResponse = await _makeRequest(
+        _client.post(
+          Uri.parse(ApiConstants.e2eBootstrapComplete),
+          headers: {
+            'Content-Type': ApiConstants.contentTypeJson,
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: completeRequestBody,
+        ).timeout(const Duration(seconds: 30)),
+      );
 
-      print('🔐 E2E Bootstrap Complete Response Status: ${completeResponse.statusCode}');
-      print('🔐 E2E Bootstrap Complete Response Body: ${completeResponse.body}');
+      // print('🔐 E2E Bootstrap Complete Response Status: ${completeResponse.statusCode}');
+      // print('🔐 E2E Bootstrap Complete Response Body: ${completeResponse.body}');
       
       Map<String, dynamic> completeData;
       try {
@@ -268,7 +404,66 @@ class E2EService {
               errorMessage = errorData['message']?.toString() ?? errorMessage;
             }
           }
-          return E2EBootstrapResult.error(errorMessage);
+          
+          // For new user registration, always retry bootstrap/complete once
+          // This handles Android timing issues and transient server errors
+          print('🔐 E2E Status: Bootstrap complete failed - retrying once... (Error: $errorMessage)');
+          // print('🔐 E2E Status: Error: $errorMessage, Status: ${completeResponse.statusCode}');
+          
+          // Wait longer before retry (gives server time to process, especially on Android)
+          // Android may need more time for the first bootstrap call to complete
+          await Future.delayed(const Duration(milliseconds: 1000));
+          
+          // Retry bootstrap/complete once for any error
+          try {
+            // print('🔐 E2E Status: Retrying bootstrap/complete API call...');
+            final retryResponse = await _makeRequest(
+              _client.post(
+                Uri.parse(ApiConstants.e2eBootstrapComplete),
+                headers: {
+                  'Content-Type': ApiConstants.contentTypeJson,
+                  'Authorization': 'Bearer $accessToken',
+                },
+                body: completeRequestBody,
+              ).timeout(const Duration(seconds: 30)),
+            );
+            
+            // print('🔐 E2E Retry Response Status: ${retryResponse.statusCode}');
+            // final responsePreview = retryResponse.body.length > 200 
+            //     ? retryResponse.body.substring(0, 200) 
+            //     : retryResponse.body;
+            // print('🔐 E2E Retry Response Body: $responsePreview');
+            
+            if (retryResponse.statusCode == 200 || retryResponse.statusCode == 201) {
+              print('🔐 E2E Status: ✅ Retry successful');
+              // Continue with key storage below (line 340+)
+              // Keys will be stored after this if block
+            } else {
+              // Retry also failed - parse error and return
+              try {
+                final retryErrorData = jsonDecode(retryResponse.body);
+                String retryErrorMessage = errorMessage;
+                if (retryErrorData is Map) {
+                  final retryError = retryErrorData['error'];
+                  if (retryError is Map) {
+                    retryErrorMessage = retryError['message']?.toString() ?? retryError['code']?.toString() ?? retryErrorMessage;
+                  } else if (retryError is String) {
+                    retryErrorMessage = retryError;
+                  } else {
+                    retryErrorMessage = retryErrorData['message']?.toString() ?? retryErrorMessage;
+                  }
+                }
+                print('🔐 E2E Status: ❌ Retry also failed - returning error: $retryErrorMessage');
+                return E2EBootstrapResult.error(retryErrorMessage);
+              } catch (parseError) {
+                print('🔐 E2E Status: ❌ Retry failed - could not parse error: $parseError');
+                return E2EBootstrapResult.error(errorMessage);
+              }
+            }
+          } catch (retryError) {
+            print('🔐 E2E Status: ❌ Retry exception: $retryError');
+            return E2EBootstrapResult.error(errorMessage);
+          }
         } catch (e) {
           return E2EBootstrapResult.error('Bootstrap complete failed: $e');
         }
@@ -345,17 +540,19 @@ class E2EService {
       print('🔐 E2E Bootstrap Request (LOGIN): POST ${ApiConstants.e2eBootstrap}');
       print('🔐 E2E Bootstrap Request Body: $requestBody');
       
-      final bootstrapResponse = await _client.post(
-        Uri.parse(ApiConstants.e2eBootstrap),
-        headers: {
-          'Content-Type': ApiConstants.contentTypeJson,
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: requestBody,
-      ).timeout(const Duration(seconds: 30));
+      final bootstrapResponse = await _makeRequest(
+        _client.post(
+          Uri.parse(ApiConstants.e2eBootstrap),
+          headers: {
+            'Content-Type': ApiConstants.contentTypeJson,
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: requestBody,
+        ).timeout(const Duration(seconds: 30)),
+      );
 
-      print('🔐 E2E Bootstrap Response Status: ${bootstrapResponse.statusCode}');
-      print('🔐 E2E Bootstrap Response Body: ${bootstrapResponse.body}');
+      // print('🔐 E2E Bootstrap Response Status: ${bootstrapResponse.statusCode}');
+      // print('🔐 E2E Bootstrap Response Body: ${bootstrapResponse.body}');
       
       Map<String, dynamic> bootstrapData;
       try {
@@ -432,9 +629,23 @@ class E2EService {
             // This can happen when:
             // 1. Existing user uninstalled app (keys deleted) - needs pairing
             // 2. User is truly new - but this is login flow, so likely scenario 1
-            // Since this is bootstrapForLogin (not registration), if user has no keys
-            // and server says not set up, it likely means E2E exists on server but not for this device
-            // This is a pairing scenario (user needs to pair with their account)
+            // However, if this is called from auth_repository with is_new_user=null,
+            // it might be a new user. Check if error message suggests user has no E2E at all
+            final normalizedErrorMsg = errorMessage.toLowerCase();
+            final hasNoE2EAtAll = normalizedErrorMsg.contains('no existing e2e') ||
+                                 normalizedErrorMsg.contains('use bootstrap/complete') ||
+                                 (normalizedErrorMsg.contains('not set up') && 
+                                  normalizedErrorMsg.contains('generate keys'));
+            
+            if (hasNoE2EAtAll) {
+              // User has no E2E at all - this is a new user, should use registration
+              print('🔐 E2E Status: User has no E2E keys - this is a new user, should use registration');
+              return E2EBootstrapResult.error(
+                'E2E_NOT_SETUP_NEW_USER: User has no existing E2E keys. Registration flow required.'
+              );
+            }
+            
+            // Otherwise, assume pairing scenario
             print('🔐 E2E Status: No local keys and server says not set up');
             print('🔐 E2E Status: This is likely a pairing scenario (existing user, keys deleted)');
             print('🔐 E2E Status: Returning pairing required instead of error');
@@ -463,6 +674,11 @@ class E2EService {
       print('🔐 E2E Status: Status=$status, Reason=$reason, HasWrappedKu=${wrappedKu != null}');
       print('🔐 E2E Status: Message from server: $message');
       
+      // CRITICAL: Check if we have local keys BEFORE checking status
+      // If no local keys exist, this is likely Android uninstall scenario
+      final hasLocalSkd = await _storage.read(key: _skdKey);
+      final hasLocalKeys = hasLocalSkd != null && hasLocalSkd.isNotEmpty;
+      
       // PRIORITY 1: Check status and reason fields explicitly (most reliable)
       if (status == 'E2E_NOT_SETUP_FOR_THIS_DEVICE' && 
           (reason == 'NEW_DEVICE_NEEDS_PAIRING' || reason == null)) {
@@ -470,6 +686,24 @@ class E2EService {
         return E2EBootstrapResult.pairingRequired(
           message ?? pairingMessage
         );
+      }
+      
+      // PRIORITY 1.5: If no local keys and status indicates E2E exists elsewhere, pairing required
+      // This handles Android uninstall where server knows E2E exists but device has no keys
+      // Check multiple indicators that E2E exists on server but not for this device
+      if (!hasLocalKeys) {
+        final e2eSetupOnServer = bootstrapData['e2e_setup'] == true || 
+                                 status == 'E2E_EXISTS_ON_ANOTHER_DEVICE' ||
+                                 status == 'E2E_ALREADY_ACTIVE' ||
+                                 (status != null && status.contains('E2E') && !status.contains('NOT_SETUP'));
+        
+        if (e2eSetupOnServer && wrappedKu == null) {
+          print('🔐 E2E Status: E2E exists on server but no local keys and no wrappedKu - Android uninstall scenario');
+          print('🔐 E2E Status: Status=$status, e2e_setup=${bootstrapData['e2e_setup']}, wrappedKu=${wrappedKu != null}');
+          return E2EBootstrapResult.pairingRequired(
+            'E2E encryption exists but device keys are missing. Device pairing required. Please scan QR code or enter OTP, or use your recovery phrase.'
+          );
+        }
       }
       
       // PRIORITY 2: Check entire response body for pairing message (even on status 200)
@@ -483,24 +717,37 @@ class E2EService {
       }
       
       // Explicitly handle E2E_ALREADY_ACTIVE status (pairing completed)
-      if (status == 'E2E_ALREADY_ACTIVE' && wrappedKu != null) {
-        print('🔐 E2E Status: E2E_ALREADY_ACTIVE with wrappedKu - pairing completed');
-        print('🔐 E2E Status: Message: $message');
+      if (status == 'E2E_ALREADY_ACTIVE') {
+        print('🔐 E2E Status: E2E_ALREADY_ACTIVE status detected');
+        print('🔐 E2E Status: Message: $message, HasWrappedKu: ${wrappedKu != null}');
         
         // Check if we have SKd (should exist from requestPairing in pairing flow)
         final hasLocalSkd = await _storage.read(key: _skdKey);
         if (hasLocalSkd == null || hasLocalSkd.isEmpty) {
-          print('🔐 E2E Status: No local SKd - cannot decrypt wrappedKu');
-          return E2EBootstrapResult.error('Device key not found - cannot complete pairing');
+          // E2E_ALREADY_ACTIVE but no local keys - Android uninstall scenario
+          print('🔐 E2E Status: E2E_ALREADY_ACTIVE but no local SKd - Android uninstall scenario');
+          print('🔐 E2E Status: Returning pairing required');
+          return E2EBootstrapResult.pairingRequired(
+            'E2E encryption exists but device keys are missing. Device pairing required. Please scan QR code or enter OTP, or use your recovery phrase.'
+          );
         }
         
-        // Attempt to decrypt wrappedKu - this handles pairing completion
-        print('🔐 E2E Status: Attempting to decrypt wrappedKu for pairing completion');
-        try {
-          return await _recoverKeysForExistingDevice(accessToken, deviceId, bootstrapData);
-        } catch (e) {
-          print('🔐 E2E Status: Failed to recover keys: $e');
-          return E2EBootstrapResult.error('Failed to complete pairing: $e');
+        // We have SKd - check if wrappedKu is present
+        if (wrappedKu != null) {
+          // Attempt to decrypt wrappedKu - this handles pairing completion
+          print('🔐 E2E Status: Attempting to decrypt wrappedKu for pairing completion');
+          try {
+            return await _recoverKeysForExistingDevice(accessToken, deviceId, bootstrapData);
+          } catch (e) {
+            print('🔐 E2E Status: Failed to recover keys: $e');
+            return E2EBootstrapResult.error('Failed to complete pairing: $e');
+          }
+        } else {
+          // E2E_ALREADY_ACTIVE but no wrappedKu - pairing pending or Android uninstall
+          print('🔐 E2E Status: E2E_ALREADY_ACTIVE but no wrappedKu - pairing required');
+          return E2EBootstrapResult.pairingRequired(
+            'Device needs to be paired. Please scan QR code or enter OTP, or use your recovery phrase.'
+          );
         }
       }
       
@@ -512,8 +759,12 @@ class E2EService {
         // Check if we have SKd
         final hasLocalSkd = await _storage.read(key: _skdKey);
         if (hasLocalSkd == null || hasLocalSkd.isEmpty) {
-          print('🔐 E2E Status: No local SKd - cannot decrypt wrappedKu');
-          return E2EBootstrapResult.error('Device key not found - cannot complete pairing');
+          // wrappedKu exists but no local SKd - Android uninstall scenario
+          print('🔐 E2E Status: wrappedKu exists but no local SKd - Android uninstall scenario');
+          print('🔐 E2E Status: Cannot decrypt without matching device key - pairing required');
+          return E2EBootstrapResult.pairingRequired(
+            'E2E encryption exists but device keys are missing. Device pairing required. Please scan QR code or enter OTP, or use your recovery phrase.'
+          );
         }
         
         // Attempt to decrypt wrappedKu
@@ -534,17 +785,15 @@ class E2EService {
         final hasLocalSkd = await _storage.read(key: _skdKey);
         if (hasLocalSkd == null || hasLocalSkd.isEmpty) {
           print('🔐 E2E Status: Server has E2E but no local SKd - cannot decrypt');
+          print('🔐 E2E Status: This is Android uninstall scenario (keys deleted) - needs pairing');
           
-          // If we're in pairing flow, we should have SKd from requestPairing
-          // If not, this might be a normal login scenario
-          print('🔐 E2E Recovery: Clearing server state and retrying registration');
-          
-          // Clear any stale session keys
-          await _storage.delete(key: _kuKey);
-          
-          // Note: We can't clear server state from here, but we can try registration
-          // Server should handle duplicate registration gracefully
-          return await bootstrapForRegistration(accessToken);
+          // CRITICAL: If server says E2E is set up but we have no local SKd,
+          // this means keys were deleted (Android uninstall) - pairing is required
+          // DO NOT fall back to registration (user is existing, not new)
+          print('🔐 E2E Status: Returning pairing required (Android uninstall scenario)');
+          return E2EBootstrapResult.pairingRequired(
+            'E2E encryption exists but device keys are missing. Device pairing required. Please scan QR code or enter OTP, or use your recovery phrase.'
+          );
       }
       
       // Step 3.5: Query Device Keys Table for (userId, deviceId)
@@ -740,11 +989,13 @@ class E2EService {
         print('🔐 E2E Recovery: The laptop may have generated new keys but server has old wrappedKu');
         
         // In pairing scenario, if decryption fails, it means the keys don't match
-        // This could happen if the laptop requested pairing multiple times
-        // We should return a specific error that the pairing flow can handle
-        return E2EBootstrapResult.error(
+        // This happens when: user registered before, app uninstalled/cleared data (keys deleted),
+        // same device ID but new keys generated, backend has old wrappedKu encrypted with old keys
+        // New keys cannot decrypt old wrappedKu → user must use recovery phrase
+        print('🔐 E2E Recovery: Keys mismatch - user must recover account using recovery phrase');
+        return E2EBootstrapResult.recoveryRequired(
           'E2E keys mismatch - wrappedKu was encrypted with a different public key. '
-          'This may happen if pairing was requested multiple times. Please try pairing again.'
+          'Your device keys were reset. Please use your recovery phrase to restore access.'
         );
       }
       return E2EBootstrapResult.error('Failed to recover keys: $e');
@@ -785,6 +1036,46 @@ class E2EService {
     
     // Step 5: Prepend IV to encrypted data (IV + encrypted data)
     return Uint8List.fromList([...iv, ...encrypted]);
+  }
+
+  /// Encrypt data with Ku using AES-GCM
+  /// Used to encrypt recovery phrase before sending to backend
+  /// Returns IV (12 bytes) + ciphertext
+  Future<Uint8List> _encryptDataWithKu(Uint8List ku, Uint8List data) async {
+    // Generate random IV (12 bytes for GCM)
+    final iv = Uint8List(12);
+    final secureRandom = Random.secure();
+    for (int i = 0; i < 12; i++) {
+      iv[i] = secureRandom.nextInt(256);
+    }
+
+    // Encrypt using AES-GCM with Ku as the key
+    final cipher = GCMBlockCipher(AESEngine())
+      ..init(true, AEADParameters(KeyParameter(ku), 128, iv, Uint8List(0)));
+
+    final encrypted = cipher.process(data);
+    
+    // Prepend IV to encrypted data (IV + encrypted data)
+    return Uint8List.fromList([...iv, ...encrypted]);
+  }
+
+  /// Decrypt data with Ku using AES-GCM
+  /// Used to decrypt recovery phrase when retrieving from backend
+  /// Expects IV (12 bytes) + ciphertext
+  Future<Uint8List> _decryptDataWithKu(Uint8List ku, Uint8List encryptedData) async {
+    if (encryptedData.length < 12) {
+      throw Exception('Invalid encrypted data: too short');
+    }
+    
+    // Extract IV (first 12 bytes) and ciphertext
+    final iv = encryptedData.sublist(0, 12);
+    final ciphertext = encryptedData.sublist(12);
+
+    // Decrypt using AES-GCM with Ku as the key
+    final cipher = GCMBlockCipher(AESEngine())
+      ..init(false, AEADParameters(KeyParameter(ku), 128, iv, Uint8List(0)));
+
+    return cipher.process(ciphertext);
   }
 
   /// Encrypt Ku with PKd using ECDH key exchange and AES-GCM
@@ -1452,14 +1743,16 @@ class E2EService {
       print('🔐 Recovery Request: POST ${ApiConstants.e2eRecovery}');
       print('🔐 Recovery Request Body: $requestBody');
       
-      final recoveryResponse = await _client.post(
-        Uri.parse(ApiConstants.e2eRecovery),
-        headers: {
-          'Content-Type': ApiConstants.contentTypeJson,
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: requestBody,
-      ).timeout(const Duration(seconds: 30));
+      final recoveryResponse = await _makeRequest(
+        _client.post(
+          Uri.parse(ApiConstants.e2eRecovery),
+          headers: {
+            'Content-Type': ApiConstants.contentTypeJson,
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: requestBody,
+        ).timeout(const Duration(seconds: 30)),
+      );
 
       print('🔐 Recovery Response Status: ${recoveryResponse.statusCode}');
       print('🔐 Recovery Response Body: ${recoveryResponse.body}');
@@ -1576,14 +1869,16 @@ class E2EService {
       print('🔐 Recovery Bootstrap Complete Request: POST ${ApiConstants.e2eBootstrapComplete}');
       print('🔐 Recovery Bootstrap Complete Request Body: $completeRequestBody');
       
-      final completeResponse = await _client.post(
-        Uri.parse(ApiConstants.e2eBootstrapComplete),
-        headers: {
-          'Content-Type': ApiConstants.contentTypeJson,
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: completeRequestBody,
-      ).timeout(const Duration(seconds: 30));
+      final completeResponse = await _makeRequest(
+        _client.post(
+          Uri.parse(ApiConstants.e2eBootstrapComplete),
+          headers: {
+            'Content-Type': ApiConstants.contentTypeJson,
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: completeRequestBody,
+        ).timeout(const Duration(seconds: 30)),
+      );
 
       print('🔐 Recovery Bootstrap Complete Response Status: ${completeResponse.statusCode}');
       print('🔐 Recovery Bootstrap Complete Response Body: ${completeResponse.body}');
@@ -1627,6 +1922,142 @@ class E2EService {
       return E2EBootstrapResult.error('Recovery failed: $e');
     }
   }
+
+  /// Generate a temporary key pair for login/register when no local keys exist
+  /// This is used for Android uninstall/reinstall scenario
+  /// Returns the public key (PKd) in base64 format
+  /// Note: This key pair is NOT stored - it's only used for the login/register API call
+  Future<String?> generateTemporaryKeyPair() async {
+    try {
+      print('🔐 Generating temporary key pair for login/register (no local keys)');
+      
+      // Generate P-256 keypair
+      final domainParams = ECCurve_secp256r1();
+      final keyGen = ECKeyGenerator();
+      final keyParams = ECKeyGeneratorParameters(domainParams);
+      
+      // Generate 32-byte random seed
+      final seed = Uint8List(32);
+      final secureRandom = Random.secure();
+      for (int i = 0; i < 32; i++) {
+        seed[i] = secureRandom.nextInt(256);
+      }
+      
+      // Create keypair from seed
+      final pcSecureRandom = pc.SecureRandom('Fortuna');
+      pcSecureRandom.seed(KeyParameter(seed));
+      keyGen.init(ParametersWithRandom(keyParams, pcSecureRandom));
+      final pcKeyPair = keyGen.generateKeyPair();
+      final pcPkd = pcKeyPair.publicKey as ECPublicKey;
+      
+      // Extract public key bytes
+      final pkdBytes = _ecPublicKeyToBytes(pcPkd);
+      final pkdBase64 = base64Encode(pkdBytes);
+      
+      print('🔐 Temporary key pair generated successfully');
+      return pkdBase64;
+    } catch (e) {
+      print('🔐 Failed to generate temporary key pair: $e');
+      return null;
+    }
+  }
+
+  /// Fetch and decode recovery phrase from backend
+  /// Returns the decoded recovery phrase or null if error
+  Future<String?> getRecoveryPhrase(String accessToken) async {
+    try {
+      print('🔐 Fetching recovery phrase from backend...');
+      
+      final response = await _makeRequest(
+        _client.get(
+          Uri.parse(ApiConstants.e2eRecoveryPhraseEncoded),
+          headers: {
+            'Content-Type': ApiConstants.contentTypeJson,
+            'Authorization': 'Bearer $accessToken',
+          },
+        ).timeout(const Duration(seconds: 30)),
+      );
+
+      print('🔐 Recovery phrase response status: ${response.statusCode}');
+      print('🔐 Recovery phrase response body: ${response.body}');
+
+      if (response.statusCode != 200) {
+        Map<String, dynamic> errorData;
+        try {
+          errorData = jsonDecode(response.body) as Map<String, dynamic>;
+        } catch (e) {
+          print('🔐 Failed to parse error response: $e');
+          return null;
+        }
+        
+        final error = errorData['error'];
+        String errorMessage = 'Failed to fetch recovery phrase';
+        if (error != null && error is Map) {
+          errorMessage = error['message']?.toString() ?? error['code']?.toString() ?? errorMessage;
+        } else if (error is String) {
+          errorMessage = error;
+        }
+        print('🔐 Error: $errorMessage');
+        return null;
+      }
+
+      // Parse response
+      Map<String, dynamic> responseData;
+      try {
+        final responseBody = jsonDecode(response.body);
+        if (responseBody is Map<String, dynamic>) {
+          if (responseBody.containsKey('data') && responseBody['data'] is Map) {
+            responseData = responseBody['data'] as Map<String, dynamic>;
+          } else {
+            responseData = responseBody;
+          }
+        } else {
+          print('🔐 Invalid response format: expected JSON object');
+          return null;
+        }
+      } catch (e) {
+        print('🔐 Failed to parse response: $e');
+        return null;
+      }
+
+      // Get encoded recovery phrase (check both snake_case and camelCase)
+      final recoveryPhraseEncoded = responseData['recovery_phrase_encoded']?.toString() ?? 
+                                    responseData['recoveryPhraseEncoded']?.toString();
+      
+      if (recoveryPhraseEncoded == null || recoveryPhraseEncoded.isEmpty) {
+        print('🔐 No recovery_phrase_encoded found in response');
+        print('🔐 Available keys: ${responseData.keys.toList()}');
+        return null;
+      }
+
+      // Decode from base64 and decrypt with Ku
+      try {
+        // Get current session Ku to decrypt the recovery phrase
+        final ku = await getSessionKu();
+        if (ku == null) {
+          print('🔐 No session Ku found - cannot decrypt recovery phrase');
+          return null;
+        }
+        
+        // Decode base64 to get encrypted data (IV + ciphertext)
+        final encryptedBytes = base64Decode(recoveryPhraseEncoded);
+        
+        // Decrypt with Ku
+        final decryptedBytes = await _decryptDataWithKu(ku, encryptedBytes);
+        
+        // Decode UTF-8 to get recovery phrase
+        final recoveryPhrase = utf8.decode(decryptedBytes);
+        print('🔐 Successfully decrypted and decoded recovery phrase');
+        return recoveryPhrase;
+      } catch (e) {
+        print('🔐 Failed to decrypt recovery phrase: $e');
+        return null;
+      }
+    } catch (e) {
+      print('🔐 Error fetching recovery phrase: $e');
+      return null;
+    }
+  }
 }
 
 /// Result class for E2E bootstrap operations
@@ -1634,23 +2065,34 @@ class E2EBootstrapResult {
   final Uint8List? ku;
   final String? error;
   final bool requiresPairing;
+  final bool requiresRecovery;
   final String? recoveryPhrase;
 
   E2EBootstrapResult.success(this.ku, {this.recoveryPhrase}) 
       : error = null, 
-        requiresPairing = false;
+        requiresPairing = false,
+        requiresRecovery = false;
   
   E2EBootstrapResult.error(this.error) 
       : ku = null, 
         requiresPairing = false,
+        requiresRecovery = false,
         recoveryPhrase = null;
   
   E2EBootstrapResult.pairingRequired(this.error)
       : ku = null,
         requiresPairing = true,
+        requiresRecovery = false,
+        recoveryPhrase = null;
+  
+  E2EBootstrapResult.recoveryRequired(this.error)
+      : ku = null,
+        requiresPairing = false,
+        requiresRecovery = true,
         recoveryPhrase = null;
 
   bool get isSuccess => ku != null;
   bool get needsPairing => requiresPairing;
+  bool get needsRecovery => requiresRecovery;
 }
 

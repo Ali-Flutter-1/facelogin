@@ -9,6 +9,7 @@ class ApiConstants {
   static const String e2eBootstrap = '$baseUrl/e2e/bootstrap';
   static const String e2eBootstrapComplete = '$baseUrl/e2e/bootstrap/complete';
   static const String e2eRecovery = '$baseUrl/e2e/recovery';
+  static const String e2eRecoveryPhraseEncoded = '$baseUrl/e2e/recovery-phrase-encoded';
 
 
   // Link Devices endpoints
@@ -19,6 +20,10 @@ class ApiConstants {
   static const String pairingLookupByOtp = '$baseUrl/e2e/pairing/lookup-by-otp';
   static const String pairingApprove = '$baseUrl/e2e/pairing/approve';
   static const String pairingLookup = '$baseUrl/e2e/pairing/lookup';
+
+  // Account deletion endpoints
+  static const String verifyFace = '$baseUrl/auth/verify-face';
+  static const String deleteAccount = '$baseUrl/auth/delete-account';
 
   // Request headers
   static const String contentTypeJson = "application/json";

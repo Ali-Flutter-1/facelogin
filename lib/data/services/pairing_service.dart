@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/core/constants/app_constants.dart';
-import 'package:flutter/foundation.dart';
+import 'package:facelogin/core/services/http_interceptor_service.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
@@ -41,6 +42,9 @@ class PairingService {
         body: requestBody,
       ).timeout(const Duration(seconds: 30));
 
+      // Check for 401 and handle logout (preserves E2E keys)
+      await handle401IfNeeded(response, null);
+
       debugPrint('🔗 Pairing Request Response Status: ${response.statusCode}');
       debugPrint('🔗 Pairing Request Response Body: ${response.body}');
 
@@ -73,7 +77,7 @@ class PairingService {
   /// Lookup pairing request by pairing token (on Device A - existing device)
   /// Used when scanning QR code from web
   /// Returns pairing details (deviceId, publicKey) that can be used to approve
-  Future<PairingLookupResult> lookupByPairingToken(String pairingToken) async {
+  Future<PairingLookupResult> lookupByPairingToken(String pairingToken, {BuildContext? context}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final accessToken = prefs.getString(AppConstants.accessTokenKey);
@@ -83,7 +87,8 @@ class PairingService {
 
       final url = Uri.parse('${ApiConstants.pairingLookup}?pairingToken=$pairingToken');
 
-      debugPrint('🔗 Pairing Lookup by Token: GET $url');
+      debugPrint('🔗 [API] Pairing Lookup by Token: GET $url');
+      debugPrint('🔗 [API] Access Token present: ${accessToken != null && accessToken.isNotEmpty}');
 
       final response = await _client.get(
         url,
@@ -92,6 +97,16 @@ class PairingService {
           'Accept': ApiConstants.acceptHeader,
         },
       ).timeout(const Duration(seconds: 30));
+      
+      debugPrint('🔗 [API] Response received - Status: ${response.statusCode}');
+
+      // Check for 401 and handle logout (preserves E2E keys)
+      await handle401IfNeeded(response, context);
+      
+      // If 401 occurred, return error (handler will navigate away)
+      if (response.statusCode == 401) {
+        return PairingLookupResult.error('Session expired. Please log in again.');
+      }
 
       debugPrint('🔗 Pairing Lookup Response Status: ${response.statusCode}');
       debugPrint('🔗 Pairing Lookup Response Body: ${response.body}');
@@ -157,6 +172,9 @@ class PairingService {
         body: requestBody,
       ).timeout(const Duration(seconds: 30));
 
+      // Check for 401 and handle logout (preserves E2E keys)
+      await handle401IfNeeded(response, null);
+
       debugPrint('🔗 Pairing Lookup Response Status: ${response.statusCode}');
       debugPrint('🔗 Pairing Lookup Response Body: ${response.body}');
 
@@ -219,6 +237,9 @@ class PairingService {
         body: requestBody,
       ).timeout(const Duration(seconds: 30));
 
+      // Check for 401 and handle logout (preserves E2E keys)
+      await handle401IfNeeded(response, null);
+
       debugPrint('🔗 Pairing Approve Response Status: ${response.statusCode}');
       debugPrint('🔗 Pairing Approve Response Body: ${response.body}');
 
@@ -257,6 +278,9 @@ class PairingService {
           'Accept': ApiConstants.acceptHeader,
         },
       ).timeout(const Duration(seconds: 30));
+
+      // Check for 401 and handle logout (preserves E2E keys)
+      await handle401IfNeeded(response, null);
 
       debugPrint('🔗 Pairing Status Response Status: ${response.statusCode}');
       debugPrint('🔗 Pairing Status Response Body: ${response.body}');
