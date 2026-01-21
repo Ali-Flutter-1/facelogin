@@ -583,7 +583,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
 
   /// ✅ iOS uses this (bytes directly) – SAME API payload
   Future<void> _sendBytesToApi(Uint8List bytes) async {
-    const apiUrl = ApiConstants.loginOrRegister;
+    final apiUrl = ApiConstants.loginOrRegister;
 
     try {
       setState(() {
@@ -910,7 +910,7 @@ class _GlassMorphismLoginScreenState extends State<GlassMorphismLoginScreen>
 
   /// Your original Android sender unchanged
   Future<void> _sendToApi(XFile imageFile) async {
-    const apiUrl = ApiConstants.loginOrRegister;
+    final apiUrl = ApiConstants.loginOrRegister;
 
     try {
       setState(() {

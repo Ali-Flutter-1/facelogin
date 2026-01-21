@@ -245,7 +245,7 @@ class AuthRepository {
           
           final accessTokenSaved = await prefs.setString(AppConstants.accessTokenKey, accessToken!);
           final refreshTokenSaved = await prefs.setString(AppConstants.refreshTokenKey, result.data!.refreshToken!);
-          
+            
           debugPrint('💾 Token save results: accessToken=$accessTokenSaved, refreshToken=$refreshTokenSaved');
 
           if (!accessTokenSaved || !refreshTokenSaved) {
@@ -303,18 +303,18 @@ class AuthRepository {
               debugPrint('🔗 [AUTH]     → is_public_key_matched = false → Show pairing screen first (generate QR code)');
               // Return early to show pairing screen immediately
               // Pairing screen will generate QR code first, then poll bootstrap
-              // CRITICAL: Check device owner BEFORE allowing pairing
-              if (currentUserId != null) {
-                final existingOwner = await _e2eService.getDeviceOwnerUserId();
-                if (existingOwner != null && existingOwner != currentUserId) {
-                  debugPrint('🔐 [AUTH] ⚠️ SECURITY: Different user trying to pair - BLOCKING');
-                  debugPrint('🔐 [AUTH] Device owner: $existingOwner, Attempting user: $currentUserId');
-                  return AuthResult.error(
-                    'This device is already registered to another account.\n\n'
-                    'Please use a different device'
-                  );
-                }
+            // CRITICAL: Check device owner BEFORE allowing pairing
+            if (currentUserId != null) {
+              final existingOwner = await _e2eService.getDeviceOwnerUserId();
+              if (existingOwner != null && existingOwner != currentUserId) {
+                debugPrint('🔐 [AUTH] ⚠️ SECURITY: Different user trying to pair - BLOCKING');
+                debugPrint('🔐 [AUTH] Device owner: $existingOwner, Attempting user: $currentUserId');
+                return AuthResult.error(
+                  'This device is already registered to another account.\n\n'
+                  'Please use a different device'
+                );
               }
+            }
               return AuthResult.pairingRequired(
                 'Device pairing required. Your device keys were reset. Please scan QR code or enter OTP to pair your device.'
               );
@@ -325,29 +325,29 @@ class AuthRepository {
           debugPrint('🔗 [AUTH] Decision: Continuing with normal login flow');
         } else {
           debugPrint('🔗 [AUTH] ⚠️ Login data is null or not a Map - will check bootstrap response');
-          
+        
           // Save tokens even if login data is null (needed for bootstrap)
-          final prefs = await SharedPreferences.getInstance();
+        final prefs = await SharedPreferences.getInstance();
           debugPrint('💾 Saving tokens to SharedPreferences (login data null)...');
-          
-          final accessTokenSaved = await prefs.setString(
-            AppConstants.accessTokenKey,
-            accessToken!,
-          );
-          final refreshTokenSaved = await prefs.setString(
-            AppConstants.refreshTokenKey,
-            result.data!.refreshToken!,
-          );
+        
+        final accessTokenSaved = await prefs.setString(
+          AppConstants.accessTokenKey,
+          accessToken!,
+        );
+        final refreshTokenSaved = await prefs.setString(
+          AppConstants.refreshTokenKey,
+          result.data!.refreshToken!,
+        );
 
-          debugPrint('💾 Token save results: accessToken=$accessTokenSaved, refreshToken=$refreshTokenSaved');
+        debugPrint('💾 Token save results: accessToken=$accessTokenSaved, refreshToken=$refreshTokenSaved');
 
-          if (!accessTokenSaved || !refreshTokenSaved) {
-            debugPrint('❌ Failed to save tokens to SharedPreferences');
-            return AuthResult.error(
-              'Login successful but failed to save session. Please try again.',
-            );
-          }
-          
+        if (!accessTokenSaved || !refreshTokenSaved) {
+          debugPrint('❌ Failed to save tokens to SharedPreferences');
+          return AuthResult.error(
+            'Login successful but failed to save session. Please try again.',
+          );
+        }
+
           // Set token expiration to 1 hour from now
           final tokenExpirationService = TokenExpirationService();
           await tokenExpirationService.setTokenExpiration();

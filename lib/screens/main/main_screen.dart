@@ -126,8 +126,8 @@ class _MainScreenState extends State<MainScreen> {
             SliverFillRemaining(
               hasScrollBody: false,
               child: IndexedStack(
-                index: _currentIndex,
-                children: _screens,
+        index: _currentIndex,
+        children: _screens,
               ),
             ),
           ],

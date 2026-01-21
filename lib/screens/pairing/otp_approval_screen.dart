@@ -160,8 +160,10 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ColorConstants.backgroundColor,
+      backgroundColor: ColorConstants.gradientEnd4, // Match gradient end color
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
@@ -176,9 +178,16 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
+          bottom: false, // Allow gradient to extend to bottom
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height - 
+                          MediaQuery.of(context).padding.top - 40,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
               children: [
                 // App Bar
                 Row(
@@ -187,66 +196,71 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                       icon: const Icon(
                         Icons.arrow_back_ios,
                         color: ColorConstants.primaryTextColor,
+                        size: 20,
                       ),
                       onPressed: () => Navigator.pop(context),
                     ),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Approve Device Pairing',
-                      style: TextStyle(
-                        fontFamily: 'OpenSans',
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: ColorConstants.primaryTextColor,
+                    Expanded(
+                      child: Text(
+                        'Approve Device Pairing',
+                        style: TextStyle(
+                          fontFamily: 'OpenSans',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: ColorConstants.primaryTextColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 24),
 
                 // Icon
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: ColorConstants.gradientEnd4.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.security,
-                    size: 64,
+                    size: 48,
                     color: ColorConstants.primaryTextColor,
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
                 // Title
                 const Text(
                   'Approve New Device',
                   style: TextStyle(
                     fontFamily: 'OpenSans',
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: ColorConstants.primaryTextColor,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
                 // Description
                 Text(
                   'A new device is requesting access to your account.\nEnter the OTP shown on the new device to approve.',
                   style: TextStyle(
                     fontFamily: 'OpenSans',
-                    fontSize: 14,
+                    fontSize: 12,
                     color: ColorConstants.primaryTextColor.withValues(alpha: 0.8),
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 24),
 
                 // OTP Input
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(20),
@@ -262,12 +276,12 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                         'Enter OTP',
                         style: TextStyle(
                           fontFamily: 'OpenSans',
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: ColorConstants.primaryTextColor,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _otpController,
                         keyboardType: TextInputType.number,
@@ -275,19 +289,21 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontFamily: 'OpenSans',
-                          fontSize: 32,
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 8,
+                          letterSpacing: 6,
                           color: ColorConstants.primaryTextColor,
                         ),
                         decoration: InputDecoration(
                           hintText: '000000',
                           hintStyle: TextStyle(
                             color: ColorConstants.primaryTextColor.withValues(alpha: 0.3),
-                            letterSpacing: 8,
+                            letterSpacing: 6,
+                            fontSize: 28,
                           ),
                           filled: true,
                           fillColor: ColorConstants.gradientEnd4.withValues(alpha: 0.1),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
@@ -317,7 +333,7 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
 
                 // Approve Button
                 CustomButton(
@@ -325,15 +341,15 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                   onPressed: _isProcessing ? () {} : () => _lookupPairing(),
                   backgroundColor: ColorConstants.gradientEnd4,
                   textColor: Colors.white,
-                  height: 56,
+                  height: 52,
                   borderRadius: BorderRadius.circular(16),
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 24),
 
                 // Info
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
@@ -342,16 +358,16 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                     children: [
                       Icon(
                         Icons.info_outline,
-                        size: 20,
+                        size: 18,
                         color: ColorConstants.primaryTextColor.withValues(alpha: 0.7),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           'This will allow the new device to access your encrypted data.',
                           style: TextStyle(
                             fontFamily: 'OpenSans',
-                            fontSize: 12,
+                            fontSize: 11,
                             color: ColorConstants.primaryTextColor.withValues(alpha: 0.7),
                           ),
                         ),
@@ -359,12 +375,15 @@ class _OtpApprovalScreenState extends State<OtpApprovalScreen> {
                     ],
                   ),
                 ),
+                
+                // Add bottom padding for keyboard
+                SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 16),
               ],
             ),
           ),
         ),
       ),
-    );
+    ));
   }
 }
 

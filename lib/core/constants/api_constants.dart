@@ -1,29 +1,32 @@
+import 'package:facelogin/core/constants/app_config.dart';
+
 class ApiConstants {
-  static const String baseUrl = "https://idp.pollus.tech/api";
-  static const String loginOrRegister = "$baseUrl/auth/login_or_register/";
-  static const String profileUpdate = "$baseUrl/auth/me/";
-  static const String kyc = '$baseUrl/auth/verify-id/';
-  static const String imageUpload = '$baseUrl/auth/images/upload/';
+  static String get baseUrl => AppConfig.apiBaseUrl;
+  static String get vcBaseUrl => AppConfig.vcBaseUrl;
+  static String get loginOrRegister => "$baseUrl/auth/login_or_register/";
+  static String get profileUpdate => "$baseUrl/auth/me/";
+  static String get kyc => '$baseUrl/auth/verify-id/';
+  static String get imageUpload => '$baseUrl/auth/images/upload/';
   
   // E2E Encryption endpoints
-  static const String e2eBootstrap = '$baseUrl/e2e/bootstrap';
-  static const String e2eBootstrapComplete = '$baseUrl/e2e/bootstrap/complete';
-  static const String e2eRecovery = '$baseUrl/e2e/recovery';
-  static const String e2eRecoveryPhraseEncoded = '$baseUrl/e2e/recovery-phrase-encoded';
+  static String get e2eBootstrap => '$baseUrl/e2e/bootstrap';
+  static String get e2eBootstrapComplete => '$baseUrl/e2e/bootstrap/complete';
+  static String get e2eRecovery => '$baseUrl/e2e/recovery';
+  static String get e2eRecoveryPhraseEncoded => '$baseUrl/e2e/recovery-phrase-encoded';
 
 
   // Link Devices endpoints
-  static const String allDevices='$baseUrl/e2e/devices';
+  static String get allDevices => '$baseUrl/e2e/devices';
 
   // Device Pairing endpoints (for cross-device E2E setup)
-  static const String pairingRequest = '$baseUrl/e2e/pairing/request';
-  static const String pairingLookupByOtp = '$baseUrl/e2e/pairing/lookup-by-otp';
-  static const String pairingApprove = '$baseUrl/e2e/pairing/approve';
-  static const String pairingLookup = '$baseUrl/e2e/pairing/lookup';
+  static String get pairingRequest => '$baseUrl/e2e/pairing/request';
+  static String get pairingLookupByOtp => '$baseUrl/e2e/pairing/lookup-by-otp';
+  static String get pairingApprove => '$baseUrl/e2e/pairing/approve';
+  static String get pairingLookup => '$baseUrl/e2e/pairing/lookup';
 
   // Account deletion endpoints
-  static const String verifyFace = '$baseUrl/auth/verify-face';
-  static const String deleteAccount = '$baseUrl/auth/delete-account';
+  static String get verifyFace => '$baseUrl/auth/verify-face';
+  static String get deleteAccount => '$baseUrl/auth/delete-account';
 
   // Request headers
   static const String contentTypeJson = "application/json";

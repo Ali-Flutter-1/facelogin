@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:facelogin/constant/constant.dart';
+import 'package:facelogin/core/constants/api_constants.dart';
 import 'package:facelogin/customWidgets/custom_toast.dart';
 import 'package:facelogin/screens/kyc/kyc_screen.dart';
 import 'package:flutter/foundation.dart';
@@ -23,7 +24,7 @@ class KycController extends GetxController {
   RxBool isUploadingBack = false.obs;
   
   // Countdown timer for verification
-  static const int verificationTimeSeconds = 150;
+  static const int verificationTimeSeconds = 180; // 3 minutes
   RxInt remainingSeconds = verificationTimeSeconds.obs;
   Timer? _countdownTimer;
 
@@ -80,7 +81,7 @@ class KycController extends GetxController {
         return null;
       }
 
-      final uploadUrl = Uri.parse('https://idp.pollus.tech/api/auth/images/upload/');
+      final uploadUrl = Uri.parse('${ApiConstants.imageUpload}');
       var request = http.MultipartRequest('POST', uploadUrl);
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json, text/plain, */*';

@@ -39,7 +39,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       // Call the SSO authorize API
-      final redirectUri = Uri.encodeComponent('https://vc.pollus.tech/autologin');
+      final redirectUri = Uri.encodeComponent('${ApiConstants.vcBaseUrl}/autologin');
       final ssoUrl = '${ApiConstants.baseUrl}/auth/sso-authorize?redirect_uri=$redirectUri';
       
       debugPrint('🔐 [SSO] Calling: $ssoUrl');
@@ -60,7 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         
         if (data['success'] == true && data['data']?['token'] != null) {
           final ssoToken = data['data']['token'];
-          final autologinUrl = 'https://vc.pollus.tech/autologin?code=$ssoToken';
+          final autologinUrl = '${ApiConstants.vcBaseUrl}/autologin?code=$ssoToken';
           
           debugPrint('🔐 [SSO] Opening URL: $autologinUrl');
           

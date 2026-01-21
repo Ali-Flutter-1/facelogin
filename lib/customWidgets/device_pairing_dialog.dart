@@ -134,7 +134,7 @@ class _DevicePairingDialogState extends State<DevicePairingDialog> {
   }
 
   /// Generate pairing URL that Device A can scan
-  /// Format: https://idp.pollus.tech/pair?pairingToken=<token>
+  /// Format: {baseUrl}/pair?pairingToken=<token>
   String _generatePairingUrl(String pairingToken) {
     final baseUrl = ApiConstants.baseUrl.replaceAll('/api', '');
     return '$baseUrl/pair?pairingToken=$pairingToken';

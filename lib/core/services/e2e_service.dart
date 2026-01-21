@@ -150,12 +150,12 @@ class E2EService {
       
       final bootstrapResponse = await _makeRequest(
         _client.post(
-          Uri.parse(ApiConstants.e2eBootstrap),
-          headers: {
-            'Content-Type': ApiConstants.contentTypeJson,
-            'Authorization': 'Bearer $accessToken',
-          },
-          body: requestBody,
+        Uri.parse(ApiConstants.e2eBootstrap),
+        headers: {
+          'Content-Type': ApiConstants.contentTypeJson,
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: requestBody,
         ).timeout(const Duration(seconds: 30)),
       );
 
@@ -346,12 +346,12 @@ class E2EService {
       
       final completeResponse = await _makeRequest(
         _client.post(
-          Uri.parse(ApiConstants.e2eBootstrapComplete),
-          headers: {
-            'Content-Type': ApiConstants.contentTypeJson,
-            'Authorization': 'Bearer $accessToken',
-          },
-          body: completeRequestBody,
+        Uri.parse(ApiConstants.e2eBootstrapComplete),
+        headers: {
+          'Content-Type': ApiConstants.contentTypeJson,
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: completeRequestBody,
         ).timeout(const Duration(seconds: 30)),
       );
 
@@ -419,12 +419,12 @@ class E2EService {
             // print('🔐 E2E Status: Retrying bootstrap/complete API call...');
             final retryResponse = await _makeRequest(
               _client.post(
-                Uri.parse(ApiConstants.e2eBootstrapComplete),
-                headers: {
-                  'Content-Type': ApiConstants.contentTypeJson,
-                  'Authorization': 'Bearer $accessToken',
-                },
-                body: completeRequestBody,
+              Uri.parse(ApiConstants.e2eBootstrapComplete),
+              headers: {
+                'Content-Type': ApiConstants.contentTypeJson,
+                'Authorization': 'Bearer $accessToken',
+              },
+              body: completeRequestBody,
               ).timeout(const Duration(seconds: 30)),
             );
             
@@ -542,12 +542,12 @@ class E2EService {
       
       final bootstrapResponse = await _makeRequest(
         _client.post(
-          Uri.parse(ApiConstants.e2eBootstrap),
-          headers: {
-            'Content-Type': ApiConstants.contentTypeJson,
-            'Authorization': 'Bearer $accessToken',
-          },
-          body: requestBody,
+        Uri.parse(ApiConstants.e2eBootstrap),
+        headers: {
+          'Content-Type': ApiConstants.contentTypeJson,
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: requestBody,
         ).timeout(const Duration(seconds: 30)),
       );
 
@@ -1745,12 +1745,12 @@ class E2EService {
       
       final recoveryResponse = await _makeRequest(
         _client.post(
-          Uri.parse(ApiConstants.e2eRecovery),
-          headers: {
-            'Content-Type': ApiConstants.contentTypeJson,
-            'Authorization': 'Bearer $accessToken',
-          },
-          body: requestBody,
+        Uri.parse(ApiConstants.e2eRecovery),
+        headers: {
+          'Content-Type': ApiConstants.contentTypeJson,
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: requestBody,
         ).timeout(const Duration(seconds: 30)),
       );
 
@@ -1871,12 +1871,12 @@ class E2EService {
       
       final completeResponse = await _makeRequest(
         _client.post(
-          Uri.parse(ApiConstants.e2eBootstrapComplete),
-          headers: {
-            'Content-Type': ApiConstants.contentTypeJson,
-            'Authorization': 'Bearer $accessToken',
-          },
-          body: completeRequestBody,
+        Uri.parse(ApiConstants.e2eBootstrapComplete),
+        headers: {
+          'Content-Type': ApiConstants.contentTypeJson,
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: completeRequestBody,
         ).timeout(const Duration(seconds: 30)),
       );
 
@@ -1970,11 +1970,11 @@ class E2EService {
       
       final response = await _makeRequest(
         _client.get(
-          Uri.parse(ApiConstants.e2eRecoveryPhraseEncoded),
-          headers: {
-            'Content-Type': ApiConstants.contentTypeJson,
-            'Authorization': 'Bearer $accessToken',
-          },
+        Uri.parse(ApiConstants.e2eRecoveryPhraseEncoded),
+        headers: {
+          'Content-Type': ApiConstants.contentTypeJson,
+          'Authorization': 'Bearer $accessToken',
+        },
         ).timeout(const Duration(seconds: 30)),
       );
 

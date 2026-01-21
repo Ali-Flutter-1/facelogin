@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:facelogin/core/constants/color_constants.dart';
@@ -107,7 +108,7 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
       debugPrint('🔗 [Pairing] lookupByPairingToken result - isSuccess: ${lookupResult.isSuccess}, error: ${lookupResult.error}');
       
       // If 401 occurred, the handler already navigated away, so just return
-      if (!mounted) return;
+        if (!mounted) return;
       
       // Close loading dialog if still open
       try {
@@ -128,9 +129,9 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
       
       // Use deviceIdB from QR code if available, otherwise fallback to lookup result
       final finalDeviceIdB = deviceIdB ?? lookupResult.deviceId;
-      
+
       if (finalDeviceIdB == null) {
-        if (!mounted) return;
+      if (!mounted) return;
         showCustomToast(
           context,
           'Device ID not found in QR code or lookup response',
@@ -276,7 +277,7 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
 
     // Store parent context before opening bottom sheet
     final parentContext = context;
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -314,7 +315,7 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
           if (mounted) {
             debugPrint('📱 [QR Scanner] Calling _handlePairingToken with code: $code');
             try {
-              await _handlePairingToken(code);
+            await _handlePairingToken(code);
               debugPrint('📱 [QR Scanner] _handlePairingToken completed');
             } catch (e, stackTrace) {
               debugPrint('❌ [QR Scanner] Error in _handlePairingToken: $e');
@@ -730,6 +731,9 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
   String? _pendingCode;
   DateTime? _pendingCodeTime;
   bool _isConfirming = false;
+  Timer? _resetTimer;
+  DateTime? _lastDetectionTime; // Track last time we detected the same code
+  int _consecutiveDetections = 0; // Track consecutive detections of same code
 
   @override
   void initState() {
@@ -779,6 +783,21 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
 
   @override
   void dispose() {
+    // Cancel any pending reset timer
+    _resetTimer?.cancel();
+    _resetTimer = null;
+    
+    // Reset all state to prevent stuck loading states
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+        _isConfirming = false;
+        _pendingCode = null;
+        _pendingCodeTime = null;
+        _lastDetectionTime = null;
+        _consecutiveDetections = 0;
+      });
+    }
     // Don't dispose controller here - let parent handle it
     // Just stop it safely
     try {
@@ -787,6 +806,34 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
       debugPrint('⚠️ Error stopping scanner in dispose: $e');
     }
     super.dispose();
+  }
+
+  /// Reset confirming state after timeout if no QR code detected
+  void _startResetTimer() {
+    _resetTimer?.cancel();
+    _resetTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted && !_isProcessing && _pendingCode != null) {
+        _resetDetectionState();
+        debugPrint('📱 Reset timer: Clearing detection state after timeout - please scan again');
+      }
+    });
+  }
+
+  /// Reset all detection state
+  void _resetDetectionState() {
+    setState(() {
+      _pendingCode = null;
+      _pendingCodeTime = null;
+      _lastDetectionTime = null;
+      _consecutiveDetections = 0;
+      _isConfirming = false;
+    });
+  }
+
+  /// Cancel reset timer (called when QR code is detected)
+  void _cancelResetTimer() {
+    _resetTimer?.cancel();
+    _resetTimer = null;
   }
 
   @override
@@ -862,16 +909,20 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
 
                     final List<Barcode> barcodes = capture.barcodes;
                     if (barcodes.isEmpty) {
-                      // Clear pending code if no barcode detected
-                      _pendingCode = null;
-                      _pendingCodeTime = null;
+                      // No barcode detected - reset if we have pending code
+                      if (!_isProcessing && _pendingCode != null) {
+                        // Reset immediately if we have pending code (no loading shown yet)
+                        _resetDetectionState();
+                      }
                       return;
                     }
 
                     final String? code = barcodes.first.rawValue;
                     if (code == null || code.isEmpty) {
-                      _pendingCode = null;
-                      _pendingCodeTime = null;
+                      // Invalid code - reset if we have pending code
+                      if (!_isProcessing && _pendingCode != null) {
+                        _resetDetectionState();
+                      }
                       return;
                     }
 
@@ -879,11 +930,17 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
 
                     // If we have a pending code, check if it's the same
                     if (_pendingCode != null && _pendingCodeTime != null) {
-                      // If same code detected again, check if 2 seconds have passed
                       if (_pendingCode == code) {
-                        final timeDiff = now.difference(_pendingCodeTime!);
-                        if (timeDiff.inSeconds >= 2) {
-                          // 2 seconds have passed with same code - process it
+                        // Same code detected - update last detection time
+                        _lastDetectionTime = now;
+                        _consecutiveDetections++;
+                        
+                        // Check if we've had stable detection for at least 2 seconds
+                        final timeSinceFirstDetection = now.difference(_pendingCodeTime!);
+                        
+                        if (timeSinceFirstDetection.inMilliseconds >= 2000) {
+                          // Stable detection for 2+ seconds - show loading and process it
+                          _cancelResetTimer();
                           setState(() {
                             _isProcessing = true;
                             _isConfirming = false;
@@ -898,7 +955,7 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                             debugPrint('⚠️ Error stopping scanner: $e');
                           }
 
-                          debugPrint('📱 QR Code Scanned (after 2s delay): $code');
+                          debugPrint('📱 QR Code confirmed after ${timeSinceFirstDetection.inMilliseconds}ms with $_consecutiveDetections detections');
 
                           // Small delay to show processing state
                           await Future.delayed(const Duration(milliseconds: 300));
@@ -907,32 +964,31 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                           widget.onScan(code);
                           return;
                         }
-                        // Same code but less than 2 seconds - keep waiting
-                        // Show confirming state
-                        if (!_isConfirming) {
-                          setState(() {
-                            _isConfirming = true;
-                          });
-                        }
+                        
+                        // Same code but not enough time yet - silently tracking (no UI change)
+                        // Only show confirming state after 2 seconds have passed
+                        // Cancel any reset timer since we're still detecting
+                        _cancelResetTimer();
                         return;
                       } else {
-                        // Different code detected - reset pending
-                        setState(() {
-                          _pendingCode = code;
-                          _pendingCodeTime = now;
-                          _isConfirming = false;
-                        });
-                        return;
+                        // Different code detected - reset everything and start fresh
+                        debugPrint('📱 Different QR code detected - resetting');
+                        _resetDetectionState();
+                        // Fall through to set new pending code
                       }
                     }
 
-                    // First time detecting this code - set as pending
+                    // First time detecting this code OR new code after reset
+                    // Don't show loading yet - silently track for 2 seconds
+                    _cancelResetTimer();
                     setState(() {
                       _pendingCode = code;
                       _pendingCodeTime = now;
-                      _isConfirming = true;
+                      _lastDetectionTime = now;
+                      _consecutiveDetections = 1;
+                      _isConfirming = false; // Don't show loading immediately
                     });
-                    debugPrint('📱 QR Code detected, waiting 2 seconds to confirm: $code');
+                    debugPrint('📱 QR Code detected - silently tracking for 2 seconds');
                   },
                     ),
                   ),
@@ -966,38 +1022,15 @@ class _QRScannerBottomSheetState extends State<_QRScannerBottomSheet> {
                               strokeWidth: 4,
                             ),
                             const SizedBox(height: 20),
-                            Text(
-                              _isProcessing 
-                                  ? 'Processing...'
-                                  : 'Confirming QR code...',
-                              style: const TextStyle(
+                            const Text(
+                              'Processing...',
+                              style: TextStyle(
                                 fontFamily: 'OpenSans',
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 color: ColorConstants.primaryTextColor,
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            if (_pendingCode != null && !_isProcessing)
-                              Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 40),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.5),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  _pendingCode!.length > 40 
-                                      ? '${_pendingCode!.substring(0, 40)}...'
-                                      : _pendingCode!,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontFamily: 'OpenSans',
-                                    fontSize: 12,
-                                    color: ColorConstants.primaryTextColor.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                       ),

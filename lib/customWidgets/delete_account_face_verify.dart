@@ -378,11 +378,11 @@ class _DeleteAccountFaceVerifyDialogState
         // Handle other errors (400, 500, etc.)
         String errorMessage = 'Face verification failed';
         try {
-          final errorData = jsonDecode(response.body);
+        final errorData = jsonDecode(response.body);
           errorMessage = errorData['message'] ?? 
-                        errorData['error']?['message'] ?? 
+                            errorData['error']?['message'] ?? 
                         errorData['error']?.toString() ??
-                        'Face verification failed';
+                            'Face verification failed';
         } catch (e) {
           debugPrint('Could not parse error response: $e');
           errorMessage = 'Face verification failed (${response.statusCode})';

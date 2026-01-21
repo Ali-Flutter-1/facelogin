@@ -2,7 +2,7 @@ class LoginResponseModel {
   final String? accessToken;
   final String? refreshToken;
   final Map<String, dynamic>? data;
-  
+
   // New backend response fields (default to false if null)
   final bool isNewUser;
   final bool isDeviceFound;
